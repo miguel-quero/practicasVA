@@ -53,9 +53,36 @@ def EmparejarEsquinas(test_descriptors, reference_descriptors):
     return best_points
 
 
-# Recorte y rectificación del papel
+# Rectificación de la imagen usando una transformación de perspectiva
+# Orden de las esquinas: [superior izquierda, superior derecha, inferior derecha, inferior izquierda]
 def RectificarImagen(imagen, esquinas):
-    return imagen
+
+    # Transformar las esquinas a un array numpy tipo float32 para la funcion getPerspectiveTransform
+    srcImagen = np.array(esquinas,np.float32)
+
+    # Calcular el ancho similar a la distancia entre las dos esquinas superiores detectadas.
+    # Funcion de numpy para calcular la distancia entre dos puntos, para evitar utilizar la fórmula de distancia euclídea
+    # Fuente: https://numpy.org/doc/2.2/reference/generated/numpy.linalg.norm.html
+    ancho = int(np.linalg.norm(srcImagen[0] - srcImagen[1]))
+
+    # Calcular alto de tamaño proporcional a un A4 -> proporción => 1:√2 -> Alto / Ancho = √2 -> Alto = Ancho * √2
+    # Fuente: https://estudiesteve.es/blog/29-din-a4-medidas-ventajas-e-historia-del-formato
+    alto = int(ancho * np.sqrt(2))
+
+    # Esquinas de destino de la hoja de la imagen
+    dstImagen = np.array([
+        [0, 0],
+        [ancho, 0],
+        [ancho, alto],
+        [0, alto]
+    ],np.float32)
+
+    # Calcular la matriz de transformación
+    matrizPerspectiva = cv2.getPerspectiveTransform(srcImagen, dstImagen)
+
+    # Transformación de la imagen
+    return cv2.warpPerspective(imagen, matrizPerspectiva, (ancho, alto))
+
 
 # Prueba mostrar imagen
 def mostrar_redimensionada(titulo, imagen, escala=0.2):
