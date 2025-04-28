@@ -45,8 +45,30 @@ def PreprocesarImagen(imagen):
 
 
 # Usando Harris o FAST, detectar puntos de interés y calcular descriptores
-def DetectarEsquinas(image):
-    return keypoints, descriptors
+def DetectarEsquinas(imagen):
+    # Ya la recibimos en gris
+    # Parametros de Harris
+    threshold = 0.05
+    blockSize = 7  # Tamaño de la ventana
+    ksize = 7  # Tamaño del kernel de Sobel
+    k = 0.05  # Factor de Harris
+
+    # Detectar esquinas con Harris
+    esquinas = cv2.cornerHarris(imagen, blockSize, ksize, k)
+
+    # Umbral para detectar las esquinas más destacadas
+    indices = esquinas > threshold * esquinas.max()  # Filtrar las esquinas
+    imagen = cv2.cvtColor(imagen, cv2.COLOR_BGR2RGB)
+    print(f"Esquinas detectadas: {len(indices)}")
+
+    # Coordenadas de las esquinas
+    coords = [(j, i) for i in range(0, indices.shape[0]) for j in range(0, indices.shape[1]) if indices[i, j]]
+
+    # Dibujar las esquinas detectadas en la imagen
+    for coord in coords:
+        cv2.circle(imagen, coord, 3, (0, 255, 0), -1)  # Dibuja los puntos de esquina
+
+    return imagen  # Devuelve la imagen con las esquinas dibujadas
 
 # Usando BFMatcher, elegir el punto singular de cada cuadrante de la imagen de test que minimice la distancia a algún descriptor de referencia
 def EmparejarEsquinas(test_descriptors, reference_descriptors):
@@ -111,8 +133,10 @@ if __name__ == "__main__":
         exit()
 
     # Preproceso de la imagen
-    imagenFinal = PreprocesarImagen(imagen)
-    mostrar_redimensionada('Resultado', imagenFinal)
+    imagenPreprocesada = PreprocesarImagen(imagen)
+    imagenHarris = DetectarEsquinas(imagenPreprocesada)
+
+    mostrar_redimensionada('Resultado', imagenHarris)
     cv2.waitKey(0)
 
     # Guardar la imagen final
