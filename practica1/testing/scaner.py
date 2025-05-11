@@ -71,8 +71,28 @@ def DetectarEsquinas(imagen):
     return imagen  # Devuelve la imagen con las esquinas dibujadas
 
 # Usando BFMatcher, elegir el punto singular de cada cuadrante de la imagen de test que minimice la distancia a algún descriptor de referencia
-def EmparejarEsquinas(test_descriptors, reference_descriptors):
-    return best_points
+def EmparejarEsquinas(img1, img2):
+    # Detector ORB
+    sift = cv2.ORB_create()
+
+    # Detectar descriptores con SIFT
+    kp1, des1 = sift.detectAndCompute(img1, None)
+    kp2, des2 = sift.detectAndCompute(img2, None)
+
+    # BFMatcher
+    bf = cv2.BFMatcher()
+    matches = bf.knnMatch(des1, des2, k=2)
+
+    # Ratio
+    good = []
+    for m, n in matches:
+        if m.distance < 0.8 * n.distance:
+            good.append([m])
+
+    # cv2.drawMatchesKnn espera una lista de listas como coincidencias
+    img3 = cv2.drawMatchesKnn(img1, kp1, img2, kp2, good, None, flags=2)
+
+    return img3
 
 
 # Rectificación de la imagen usando una transformación de perspectiva
@@ -135,9 +155,14 @@ if __name__ == "__main__":
     # Preproceso de la imagen
     imagenPreprocesada = PreprocesarImagen(imagen)
     imagenHarris = DetectarEsquinas(imagenPreprocesada)
+    #Tengo 1 descriptor
 
-    mostrar_redimensionada('Resultado', imagenHarris)
+    mostrar_redimensionada('imagen', imagen)
+    mostrar_redimensionada('imagenPreprocesada', imagenPreprocesada)
+    img3 = EmparejarEsquinas(imagenPreprocesada, imagenHarris)
+    mostrar_redimensionada('img3', img3)
     cv2.waitKey(0)
+    quit()
 
     # Guardar la imagen final
     #cv2.imwrite(imagenSalida, imagenFinal)
