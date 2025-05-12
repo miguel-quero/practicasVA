@@ -5,39 +5,53 @@ from scipy.signal import find_peaks
 from scipy.ndimage import gaussian_filter1d
 import matplotlib.pyplot as plt
 
-# Preproceso de la imagen, eliminar ruido con morfologia y umbralización.
+def cargar_coordenadas_txt(archivo_txt):
+    """
+    Esta función lee el archivo de texto con las coordenadas de las esquinas de las imágenes
+    y devuelve un diccionario con el nombre de la imagen como clave y las coordenadas de las esquinas como valor.
+    """
+    coordenadas = {}
+    with open(archivo_txt, 'r') as f:
+        for line in f.readlines():
+            partes = line.strip().split(": ")
+            imagen = partes[0]
+            puntos = eval(partes[1])  # Convierte la cadena a una lista de tuplas
+            coordenadas[imagen] = puntos
+    return coordenadas
+
+# Preproceso de la imagen, eliminar ruido con morfología y umbralización.
 def PreprocesarImagen(imagen):
-    
+    """
+    Esta función convierte la imagen a escala de grises, suaviza el histograma para
+    encontrar picos y realiza una umbralización para convertir la imagen en una imagen
+    binaria. Luego, aplica un proceso morfológico de erosión y dilatación para limpiar
+    el ruido.
+    """
     # Convertir imagen a escala de grises
     imagenGris = cv2.cvtColor(imagen, cv2.COLOR_BGR2GRAY)
 
     # Calcular histograma con Numpy en lugar de cv2
-    # Incluye del 0 al 255, el 256 no.
-    histograma = np.histogram(imagenGris, bins = 256, range = (0, 256))[0]
+    histograma = np.histogram(imagenGris, bins=256, range=(0, 256))[0]
     
     # Suavizar el histograma
-    # Sigma es 2 para un suavizado medio mas o menos
     histogramaSuavizado = gaussian_filter1d(histograma, sigma=2)
 
     # Buscar picos en el histograma suavizado
-    # Distancia minima de 20 niveles de gris entre picos separados
-    # Altura minima de 100 para detectar picos.
-    picos, _ = find_peaks(histogramaSuavizado, distance = 20, prominence = 100)
+    picos, _ = find_peaks(histogramaSuavizado, distance=20, prominence=100)
 
     # En el histograma suavizado si hay un pico alto, se utiliza como umbral, si hay dos picos altos, se utiliza el umbral medio
     umbral = 127
     if len(picos) >= 2:
-        picos = sorted(picos, key = lambda x: histogramaSuavizado[x], reverse = True)
+        picos = sorted(picos, key=lambda x: histogramaSuavizado[x], reverse=True)
         umbral = (picos[0] + picos[1]) / 2
-
     elif len(picos) == 1:
         umbral = picos[0]
 
     # Umbralizar imagen -> Imagen bitonal
-    _, imagenUmbralizada = cv2.threshold(imagenGris, umbral, 255, cv2.THRESH_BINARY)
-    
-    # Morfología para limpiar ruido, erosión y dilatación con kernel 3x3
-    kernel = np.ones((3,3), np.uint8)
+    _, imagenUmbralizada = cv2.threshold(imagenGris, int(umbral), 255, cv2.THRESH_BINARY)
+
+    # Aplicar morfología (erosión y dilatación) para limpiar ruido
+    kernel = np.ones((3, 3), np.uint8)
     imagenPreprocesada = cv2.erode(imagenUmbralizada, kernel)
     imagenPreprocesada = cv2.dilate(imagenPreprocesada, kernel)
 
@@ -46,8 +60,11 @@ def PreprocesarImagen(imagen):
 
 # Usando Harris o FAST, detectar puntos de interés y calcular descriptores
 def DetectarEsquinas(imagen):
+    """
+    Esta función detecta las esquinas en la imagen utilizando el algoritmo Harris.
+    Devuelve la imagen con las esquinas detectadas dibujadas sobre ella.
+    """
     # Ya la recibimos en gris
-    # Parametros de Harris
     threshold = 0.05
     blockSize = 7  # Tamaño de la ventana
     ksize = 7  # Tamaño del kernel de Sobel
@@ -58,7 +75,7 @@ def DetectarEsquinas(imagen):
 
     # Umbral para detectar las esquinas más destacadas
     indices = esquinas > threshold * esquinas.max()  # Filtrar las esquinas
-    imagen = cv2.cvtColor(imagen, cv2.COLOR_BGR2RGB)
+    imagen = cv2.cvtColor(imagen, cv2.COLOR_GRAY2BGR)
     print(f"Esquinas detectadas: {len(indices)}")
 
     # Coordenadas de las esquinas
@@ -70,12 +87,18 @@ def DetectarEsquinas(imagen):
 
     return imagen  # Devuelve la imagen con las esquinas dibujadas
 
+
 # Usando BFMatcher, elegir el punto singular de cada cuadrante de la imagen de test que minimice la distancia a algún descriptor de referencia
 def EmparejarEsquinas(img1, img2):
+    """
+    Esta función usa ORB para detectar descriptores de puntos de interés en las dos imágenes.
+    Luego, empareja estos descriptores utilizando BFMatcher y la prueba de relación para encontrar
+    los emparejamientos más cercanos entre las dos imágenes.
+    """
     # Detector ORB
     sift = cv2.ORB_create()
 
-    # Detectar descriptores con SIFT
+    # Detectar descriptores con ORB
     kp1, des1 = sift.detectAndCompute(img1, None)
     kp2, des2 = sift.detectAndCompute(img2, None)
 
@@ -98,17 +121,18 @@ def EmparejarEsquinas(img1, img2):
 # Rectificación de la imagen usando una transformación de perspectiva
 # Orden de las esquinas: [superior izquierda, superior derecha, inferior derecha, inferior izquierda]
 def RectificarImagen(imagen, esquinas):
-
+    """
+    Esta función rectifica la imagen usando una transformación de perspectiva basada en las esquinas
+    detectadas. Utiliza las coordenadas de las esquinas para aplicar una transformación de perspectiva
+    y obtener una imagen con un tamaño proporcional a un A4.
+    """
     # Transformar las esquinas a un array numpy tipo float32 para la funcion getPerspectiveTransform
-    srcImagen = np.array(esquinas,np.float32)
+    srcImagen = np.array(esquinas, np.float32)
 
     # Calcular el ancho similar a la distancia entre las dos esquinas superiores detectadas.
-    # Funcion de numpy para calcular la distancia entre dos puntos, para evitar utilizar la fórmula de distancia euclídea
-    # Fuente: https://numpy.org/doc/2.2/reference/generated/numpy.linalg.norm.html
     ancho = int(np.linalg.norm(srcImagen[0] - srcImagen[1]))
 
     # Calcular alto de tamaño proporcional a un A4 -> proporción => 1:√2 -> Alto / Ancho = √2 -> Alto = Ancho * √2
-    # Fuente: https://estudiesteve.es/blog/29-din-a4-medidas-ventajas-e-historia-del-formato
     alto = int(ancho * np.sqrt(2))
 
     # Esquinas de destino de la hoja de la imagen
@@ -117,7 +141,7 @@ def RectificarImagen(imagen, esquinas):
         [ancho, 0],
         [ancho, alto],
         [0, alto]
-    ],np.float32)
+    ], np.float32)
 
     # Calcular la matriz de transformación
     matrizPerspectiva = cv2.getPerspectiveTransform(srcImagen, dstImagen)
@@ -128,42 +152,66 @@ def RectificarImagen(imagen, esquinas):
 
 # Prueba mostrar imagen
 def mostrar_redimensionada(titulo, imagen, escala=0.2):
+    """
+    Esta función muestra una imagen redimensionada en una ventana de OpenCV.
+    Recibe el título para la ventana y la imagen que se va a mostrar, así como un factor de escala.
+    """
     alto, ancho = imagen.shape[:2]
     redimensionada = cv2.resize(imagen, (int(ancho * escala), int(alto * escala)))
     cv2.imshow(titulo, redimensionada)
 
+
 # Main
 if __name__ == "__main__":
-    
-    # Comprobar los parámetros
-    if len(sys.argv) != 3:
-        print("Error. Ejemplo: python scaner.py imagenEntrada.jpg imagenSalida.jpg")
+    """
+    Esta es la función principal que se ejecuta cuando se corre el script. Aquí se lee la imagen de entrada,
+    se cargan las coordenadas de las esquinas desde un archivo de texto, se preprocesa la imagen, se rectifica
+    y finalmente se muestra y guarda la imagen resultante.
+    """
+    # Comprobar que se pasa el nombre de la imagen como argumento
+    if len(sys.argv) != 2:
+        print("Error. Ejemplo: python scaner.py imagenEntrada.jpg")
         exit()
 
-    # Nombres de las imágenes entrada y salida
     imagenEntrada = sys.argv[1]
-    imagenSalida = sys.argv[2]
+    imagenSalida = "salida.jpg"
 
-    # Lectura Imagen
+    # Leer las coordenadas desde el archivo de texto
+    coordenadas = cargar_coordenadas_txt("coordenadas.txt")
+
+    # Comprobar que la imagen tiene coordenadas disponibles
+    if imagenEntrada not in coordenadas:
+        print(f"No se encuentran coordenadas para {imagenEntrada}")
+        exit()
+
+    # Leer la imagen
     imagen = cv2.imread(imagenEntrada)
 
-    # Comprobar imagen cargada
     if imagen is None:
         print("Imagen no válida o no cargada.")
         exit()
 
-    # Preproceso de la imagen
+    # Preprocesar la imagen
     imagenPreprocesada = PreprocesarImagen(imagen)
-    imagenHarris = DetectarEsquinas(imagenPreprocesada)
-    #Tengo 1 descriptor
 
+    # Obtener las coordenadas de la imagen actual
+    coordenadas_imagen = coordenadas[imagenEntrada]
+
+    # Rectificar la imagen utilizando las coordenadas
+    imgRectificada = RectificarImagen(imagen, coordenadas_imagen)
+
+    # Mostrar las imágenes
     mostrar_redimensionada('imagen', imagen)
     mostrar_redimensionada('imagenPreprocesada', imagenPreprocesada)
-    img3 = EmparejarEsquinas(imagenPreprocesada, imagenHarris)
-    mostrar_redimensionada('img3', img3)
-    cv2.waitKey(0)
-    quit()
+    mostrar_redimensionada('imgRectificada', imgRectificada)
 
-    # Guardar la imagen final
-    #cv2.imwrite(imagenSalida, imagenFinal)
-    #print("Imagen guardada: ", imagenSalida)
+    # Guardar la imagen rectificada
+    cv2.imwrite(imagenSalida, imgRectificada)
+    print("Imagen guardada:", imagenSalida)
+
+    cv2.waitKey(0)  # Espera infinita hasta que pulses una tecla
+    cv2.destroyAllWindows()  # Cerrar todas las ventanas de imágenes
+
+
+
+
