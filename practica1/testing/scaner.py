@@ -3,7 +3,6 @@ import cv2
 import sys
 from scipy.signal import find_peaks
 from scipy.ndimage import gaussian_filter1d
-import matplotlib.pyplot as plt
 
 # Preproceso de la imagen, eliminar ruido con morfología y umbralización.
 def PreprocesarImagen(imagen):
@@ -106,6 +105,57 @@ def DetectarEsquinasAutomaticas(imagen_preprocesada, descriptores_referencia):
     # Devolver los 4 puntos seleccionados, que deberían corresponder a las esquinas de la hoja.
     return mejores_por_cuadrante
 
+# Esta función carga los descriptores BRIEF de referencia a partir de las coordenadas obtenidas con https://www.robots.ox.ac.uk/~vgg/software/via/
+#
+# Coordenadas guardadas en coordenadas.txt
+#
+# La idea es usar estos puntos clave para extraer descriptores BRIEF, que luego servirán como referencia
+# para el emparejamiento
+
+def cargar_descriptores_referencia(coordenadas_file='coordenadas.txt'):
+    # Inicializamos el descriptor BRIEF
+    brief = cv2.xfeatures2d.BriefDescriptorExtractor_create()
+
+    # Lista donde se irán acumulando todos los descriptores extraídos de cada imagen de referencia.
+    descriptores_totales = []
+
+    # Abrimos el archivo de coordenadas en modo lectura.
+    with open(coordenadas_file, 'r') as file:
+        for linea in file:
+
+            # Separamos el nombre del archivo de imagen de la lista de coordenadas.
+            nombre_imagen, lista_coordenadas = linea.strip().split(':', 1)
+            nombre_imagen = nombre_imagen.strip()
+            lista_coordenadas = lista_coordenadas.strip()
+
+            # Eliminamos corchetes y paréntesis, luego separamos por coma y agrupamos pares
+            lista_coordenadas = lista_coordenadas.replace('[', '').replace(']', '')
+            pares = lista_coordenadas.split('),')
+            puntos = []
+            for par in pares:
+                par = par.replace('(', '').replace(')', '').strip()
+                if par:
+                    x_str, y_str = par.split(',')
+                    x = float(x_str.strip())
+                    y = float(y_str.strip())
+                    puntos.append((x, y))
+
+            #Debug
+            print(nombre_imagen, lista_coordenadas)
+
+            # Creamos los keypoints a partir de las coordenadas sacadas de coordenadas.txt
+            # https://stackoverflow.com/questions/29415719/how-do-i-create-keypoints-to-compute-sift
+            keypoints = [cv2.KeyPoint(float(x), float(y), 0) for (x, y) in puntos]
+
+            # Calculamos los descriptores BRIEF en las posiciones indicadas.
+            _, descriptores = brief.compute(imagen, keypoints)
+
+            # Añadimos los descriptores calculados a la lista de todos los descriptores
+            descriptores_totales.extend(descriptores)
+
+    # Convertimos la lista final a un array de Numpy y lo devolvemos.
+    return np.array(descriptores_totales)
+
 
 # Rectificación de la imagen usando una transformación de perspectiva
 # Orden de las esquinas: [superior izquierda, superior derecha, inferior derecha, inferior izquierda]
@@ -163,7 +213,8 @@ if __name__ == "__main__":
 
     # Cargar descriptores de referencia
     print(" Cargando descriptores de referencia...")
-    descriptores_ref = np.load("descriptores_brief.npy")
+    #descriptores_ref = np.load("descriptores_brief.npy")
+    descriptores_ref = cargar_descriptores_referencia()
 
     # Detectar esquinas automáticamente
     print(" Detectando esquinas automáticamente...")
