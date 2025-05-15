@@ -3,7 +3,6 @@ import cv2
 import sys
 from scipy.signal import find_peaks
 from scipy.ndimage import gaussian_filter1d
-import matplotlib.pyplot as plt
 
 # Preproceso de la imagen, eliminar ruido con morfología y umbralización.
 def PreprocesarImagen(imagen):
