@@ -5,110 +5,118 @@ from scipy.signal import find_peaks
 from scipy.ndimage import gaussian_filter1d
 import matplotlib.pyplot as plt
 
-# Preproceso de la imagen, eliminar ruido con morfologia y umbralización.
+# Preproceso de la imagen, eliminar ruido con morfología y umbralización.
 def PreprocesarImagen(imagen):
-    
     # Convertir imagen a escala de grises
     imagenGris = cv2.cvtColor(imagen, cv2.COLOR_BGR2GRAY)
 
     # Calcular histograma con Numpy en lugar de cv2
     # Incluye del 0 al 255, el 256 no.
-    histograma = np.histogram(imagenGris, bins = 256, range = (0, 256))[0]
-    
+    histograma = np.histogram(imagenGris, bins=256, range=(0, 256))[0]
+
     # Suavizar el histograma
-    # Sigma es 2 para un suavizado medio mas o menos
+    # Sigma es 2 para un suavizado medio más o menos
     histogramaSuavizado = gaussian_filter1d(histograma, sigma=2)
 
     # Buscar picos en el histograma suavizado
-    # Distancia minima de 20 niveles de gris entre picos separados
-    # Altura minima de 100 para detectar picos.
-    picos, _ = find_peaks(histogramaSuavizado, distance = 20, prominence = 100)
+    # Distancia mínima de 20 niveles de gris entre picos separados
+    # Altura mínima de 100 para detectar picos.
+    picos, _ = find_peaks(histogramaSuavizado, distance=20, prominence=100)
 
-    # En el histograma suavizado si hay un pico alto, se utiliza como umbral, si hay dos picos altos, se utiliza el umbral medio
+    # En el histograma suavizado si hay un pico alto, se utiliza como umbral,
+    # si hay dos picos altos, se utiliza el umbral medio
     umbral = 127
     if len(picos) >= 2:
-        picos = sorted(picos, key = lambda x: histogramaSuavizado[x], reverse = True)
+        picos = sorted(picos, key=lambda x: histogramaSuavizado[x], reverse=True)
         umbral = (picos[0] + picos[1]) / 2
-
     elif len(picos) == 1:
         umbral = picos[0]
 
     # Umbralizar imagen -> Imagen bitonal
-    _, imagenUmbralizada = cv2.threshold(imagenGris, umbral, 255, cv2.THRESH_BINARY)
-    
+    _, imagenUmbralizada = cv2.threshold(imagenGris, int(umbral), 255, cv2.THRESH_BINARY)
+
     # Morfología para limpiar ruido, erosión y dilatación con kernel 3x3
-    kernel = np.ones((3,3), np.uint8)
+    kernel = np.ones((3, 3), np.uint8)
     imagenPreprocesada = cv2.erode(imagenUmbralizada, kernel)
     imagenPreprocesada = cv2.dilate(imagenPreprocesada, kernel)
 
     return imagenPreprocesada
 
+def DetectarEsquinasAutomaticas(imagen_preprocesada, descriptores_referencia):
+    # Detectar puntos clave usando FAST, adecuado para combinar con BRIEF (descriptor binario)
+    fast = cv2.FastFeatureDetector_create()
+    keypoints = fast.detect(imagen_preprocesada, None)
 
-# Usando Harris o FAST, detectar puntos de interés y calcular descriptores
-def DetectarEsquinas(imagen):
-    # Ya la recibimos en gris
-    # Parametros de Harris
-    threshold = 0.05
-    blockSize = 7  # Tamaño de la ventana
-    ksize = 7  # Tamaño del kernel de Sobel
-    k = 0.05  # Factor de Harris
+    # Calcular descriptores BRIEF en los puntos detectados
+    brief = cv2.xfeatures2d.BriefDescriptorExtractor_create()
+    keypoints, descriptores = brief.compute(imagen_preprocesada, keypoints)
 
-    # Detectar esquinas con Harris
-    esquinas = cv2.cornerHarris(imagen, blockSize, ksize, k)
+    if descriptores is None or len(keypoints) == 0:
+        print("No se encontraron descriptores.")
+        return None
 
-    # Umbral para detectar las esquinas más destacadas
-    indices = esquinas > threshold * esquinas.max()  # Filtrar las esquinas
-    imagen = cv2.cvtColor(imagen, cv2.COLOR_BGR2RGB)
-    print(f"Esquinas detectadas: {len(indices)}")
+    # Según el Tema 3  : Detección y descripción de puntos de interés, en la diapositiva 99
+    # para emparejar descriptores binarios (como BRIEF o ORB)
+    # se utiliza BFMatcher con distancia de Hamming.
+    bf = cv2.BFMatcher(cv2.NORM_HAMMING)
 
-    # Coordenadas de las esquinas
-    coords = [(j, i) for i in range(0, indices.shape[0]) for j in range(0, indices.shape[1]) if indices[i, j]]
+    # Se aplica knnMatch con k=2 para obtener los dos mejores matches por descriptor,
+    # siguiendo el método de emparejamiento mostrado en la diapositiva 99del tema 3,
+    # lo que permite aplicar el ratio test de Lowe para mejorar la calidad del emparejamiento.
+    matches_knn = bf.knnMatch(descriptores, descriptores_referencia, k=2)
 
-    # Dibujar las esquinas detectadas en la imagen
-    for coord in coords:
-        cv2.circle(imagen, coord, 3, (0, 255, 0), -1)  # Dibuja los puntos de esquina
+    # Aplicamos el ratio test de Lowe (0.75 es un valor típico) para filtrar matches ambiguos o falsos positivos.
+    good_matches = []
+    for m, n in matches_knn:
+        if m.distance < 0.75 * n.distance:
+            good_matches.append(m)
 
-    return imagen  # Devuelve la imagen con las esquinas dibujadas
+    # Se calcula el tamaño de la imagen para dividirla en cuadrantes, con el objetivo de seleccionar
+    # un punto singular representativo en cada cuadrante, como exige el enunciado.
+    alto, ancho = imagen_preprocesada.shape[:2]
 
-# Usando BFMatcher, elegir el punto singular de cada cuadrante de la imagen de test que minimice la distancia a algún descriptor de referencia
-def EmparejarEsquinas(img1, img2):
-    # Detector ORB
-    sift = cv2.ORB_create()
+    # Inicializamos la selección de los mejores matches por cuadrante
+    mejores_por_cuadrante = [None, None, None, None]  # TL, TR, BL, BR
+    distancias_min = [float('inf')] * 4
 
-    # Detectar descriptores con SIFT
-    kp1, des1 = sift.detectAndCompute(img1, None)
-    kp2, des2 = sift.detectAndCompute(img2, None)
+    # Para cada good match, clasificamos su punto en uno de los 4 cuadrantes de la imagen
+    # y seleccionamos el match con menor distancia (más fiable) por cuadrante.
+    for match in good_matches:
+        punto = keypoints[match.queryIdx].pt
+        x, y = punto
 
-    # BFMatcher
-    bf = cv2.BFMatcher()
-    matches = bf.knnMatch(des1, des2, k=2)
+        if x < ancho / 2 and y < alto / 2:
+            idx = 0  # Cuadrante superior izquierdo
+        elif x >= ancho / 2 and y < alto / 2:
+            idx = 1  # Cuadrante superior derecho
+        elif x < ancho / 2 and y >= alto / 2:
+            idx = 2  # Cuadrante inferior izquierdo
+        else:
+            idx = 3  # Cuadrante inferior derecho
 
-    # Ratio
-    good = []
-    for m, n in matches:
-        if m.distance < 0.8 * n.distance:
-            good.append([m])
+        if match.distance < distancias_min[idx]:
+            distancias_min[idx] = match.distance
+            mejores_por_cuadrante[idx] = punto
 
-    # cv2.drawMatchesKnn espera una lista de listas como coincidencias
-    img3 = cv2.drawMatchesKnn(img1, kp1, img2, kp2, good, None, flags=2)
+    # Si alguno de los cuadrantes no tiene punto asignado, significa que no se detectaron las 4 esquinas.
+    if None in mejores_por_cuadrante:
+        print("No se pudieron detectar las 4 esquinas.")
+        return None
 
-    return img3
+    # Devolver los 4 puntos seleccionados, que deberían corresponder a las esquinas de la hoja.
+    return mejores_por_cuadrante
 
 
 # Rectificación de la imagen usando una transformación de perspectiva
 # Orden de las esquinas: [superior izquierda, superior derecha, inferior derecha, inferior izquierda]
 def RectificarImagen(imagen, esquinas):
-
-    # Transformar las esquinas a un array numpy tipo float32 para la funcion getPerspectiveTransform
-    srcImagen = np.array(esquinas,np.float32)
+    # Transformar las esquinas a un array numpy tipo float32 para la función getPerspectiveTransform
+    srcImagen = np.array(esquinas, np.float32)
 
     # Calcular el ancho similar a la distancia entre las dos esquinas superiores detectadas.
-    # Funcion de numpy para calcular la distancia entre dos puntos, para evitar utilizar la fórmula de distancia euclídea
-    # Fuente: https://numpy.org/doc/2.2/reference/generated/numpy.linalg.norm.html
     ancho = int(np.linalg.norm(srcImagen[0] - srcImagen[1]))
 
     # Calcular alto de tamaño proporcional a un A4 -> proporción => 1:√2 -> Alto / Ancho = √2 -> Alto = Ancho * √2
-    # Fuente: https://estudiesteve.es/blog/29-din-a4-medidas-ventajas-e-historia-del-formato
     alto = int(ancho * np.sqrt(2))
 
     # Esquinas de destino de la hoja de la imagen
@@ -117,14 +125,13 @@ def RectificarImagen(imagen, esquinas):
         [ancho, 0],
         [ancho, alto],
         [0, alto]
-    ],np.float32)
+    ], np.float32)
 
     # Calcular la matriz de transformación
     matrizPerspectiva = cv2.getPerspectiveTransform(srcImagen, dstImagen)
 
     # Transformación de la imagen
     return cv2.warpPerspective(imagen, matrizPerspectiva, (ancho, alto))
-
 
 # Prueba mostrar imagen
 def mostrar_redimensionada(titulo, imagen, escala=0.2):
@@ -134,7 +141,6 @@ def mostrar_redimensionada(titulo, imagen, escala=0.2):
 
 # Main
 if __name__ == "__main__":
-
     # Comprobar los parámetros
     if len(sys.argv) != 3:
         print("Error. Ejemplo: python scaner.py imagenEntrada.jpg imagenSalida.jpg")
@@ -154,16 +160,34 @@ if __name__ == "__main__":
 
     # Preproceso de la imagen
     imagenPreprocesada = PreprocesarImagen(imagen)
-    imagenHarris = DetectarEsquinas(imagenPreprocesada)
-    #Tengo 1 descriptor
 
-    mostrar_redimensionada('imagen', imagen)
-    mostrar_redimensionada('imagenPreprocesada', imagenPreprocesada)
-    img3 = EmparejarEsquinas(imagenPreprocesada, imagenHarris)
-    mostrar_redimensionada('img3', img3)
+    # Cargar descriptores de referencia
+    print(" Cargando descriptores de referencia...")
+    descriptores_ref = np.load("descriptores_brief.npy")
+
+    # Detectar esquinas automáticamente
+    print(" Detectando esquinas automáticamente...")
+    esquinas = DetectarEsquinasAutomaticas(imagenPreprocesada, descriptores_ref)
+
+    if esquinas is None:
+        print(" No se pudieron detectar las 4 esquinas necesarias.")
+        exit()
+
+    print(f"Esquinas detectadas: {esquinas}")
+
+    # Rectificar imagen usando las esquinas detectadas
+    print("⏳ Rectificando imagen...")
+    imagenRectificada = RectificarImagen(imagen, esquinas)
+
+    # Mostrar imágenes para debug
+    mostrar_redimensionada('Imagen original', imagen)
+    mostrar_redimensionada('Imagen preprocesada', imagenPreprocesada)
+    mostrar_redimensionada('Imagen rectificada', imagenRectificada)
+
+    # Guardar imagen rectificada
+    cv2.imwrite(imagenSalida, imagenRectificada)
+    print(f" Imagen rectificada guardada como: {imagenSalida}")
+
     cv2.waitKey(0)
-    quit()
+    cv2.destroyAllWindows()
 
-    # Guardar la imagen final
-    #cv2.imwrite(imagenSalida, imagenFinal)
-    #print("Imagen guardada: ", imagenSalida)
