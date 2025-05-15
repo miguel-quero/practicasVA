@@ -134,7 +134,7 @@ def mostrar_redimensionada(titulo, imagen, escala=0.2):
 
 # Main
 if __name__ == "__main__":
-    
+
     # Comprobar los parámetros
     if len(sys.argv) != 3:
         print("Error. Ejemplo: python scaner.py imagenEntrada.jpg imagenSalida.jpg")
