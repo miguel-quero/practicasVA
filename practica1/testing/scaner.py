@@ -85,13 +85,13 @@ def DetectarEsquinasAutomaticas(imagen_preprocesada, descriptores_referencia):
         x, y = punto
 
         if x < ancho / 2 and y < alto / 2:
-            idx = 0  # Cuadrante superior izquierdo
+            idx = 0  # Cuadrante superior izquierdo. Primera coordenada
         elif x >= ancho / 2 and y < alto / 2:
-            idx = 1  # Cuadrante superior derecho
+            idx = 1  # Cuadrante superior derecho. Segunda coordenada
         elif x < ancho / 2 and y >= alto / 2:
-            idx = 2  # Cuadrante inferior izquierdo
+            idx = 3  # Cuadrante inferior izquierdo. Ultima coordenada
         else:
-            idx = 3  # Cuadrante inferior derecho
+            idx = 2  # Cuadrante inferior derecho. Tercera coordenada
 
         if match.distance < distancias_min[idx]:
             distancias_min[idx] = match.distance
@@ -112,7 +112,7 @@ def DetectarEsquinasAutomaticas(imagen_preprocesada, descriptores_referencia):
 # La idea es usar estos puntos clave para extraer descriptores BRIEF, que luego servirán como referencia
 # para el emparejamiento
 
-def cargar_descriptores_referencia(coordenadas_file='coordenadas.txt'):
+def cargar_descriptores_referencia(archivo_coordenadas='coordenadas.txt'):
     # Inicializamos el descriptor BRIEF
     brief = cv2.xfeatures2d.BriefDescriptorExtractor_create()
 
@@ -120,7 +120,7 @@ def cargar_descriptores_referencia(coordenadas_file='coordenadas.txt'):
     descriptores_totales = []
 
     # Abrimos el archivo de coordenadas en modo lectura.
-    with open(coordenadas_file, 'r') as file:
+    with open(archivo_coordenadas, 'r') as file:
         for linea in file:
 
             # Separamos el nombre del archivo de imagen de la lista de coordenadas.
