@@ -36,7 +36,10 @@ def PreprocesarImagen(imagen):
 
     # Morfología para limpiar ruido, erosión y dilatación con kernel 3x3. Apertura
     kernel = np.ones((3, 3), np.uint8)
+
+    # Hemos utilizado un filtro de suavizado gaussiano para eliminar un poco el ruido porque así nos detectaba mejor las esquinas con Harris y teníamos mejor rectificadas las imagenes
     imagenPreprocesada = cv2.GaussianBlur(imagenUmbralizada, (3, 3), 1)
+
     imagenPreprocesada = cv2.erode(imagenPreprocesada, kernel)
     imagenPreprocesada = cv2.dilate(imagenPreprocesada, kernel)
     imagenPreprocesada = cv2.dilate(imagenPreprocesada, kernel)
@@ -44,138 +47,145 @@ def PreprocesarImagen(imagen):
 
     return imagenPreprocesada
 
-def DetectarEsquinasAutomaticas(imagen_preprocesada, descriptores_referencia):
-    # Ya la recibimos en gris
-    # Parametros de Harris
-    threshold = 0.05
-    blockSize = 7  # Tamaño de la ventana
-    ksize = 7  # Tamaño del kernel de Sobel
-    k = 0.05  # Factor de Harris
+# Esta función carga los descriptores BRIEF de referencia a partir de las coordenadas
+    # obtenidas con el software  VIA https://www.robots.ox.ac.uk/~vgg/software/via/
+    #
+    # Coordenadas guardadas en coordenadas.txt
+    #
+    # La idea es usar estos puntos clave para extraer descriptores BRIEF, que luego servirán
+    # como referencia para el emparejamiento
+def CargarDescriptoresReferencia(rutaCoordenadas):
+    
 
-    # Detectar esquinas con Harris
-    esquinas = cv2.cornerHarris(imagen_preprocesada, blockSize, ksize, k)
-
-    # Umbral para detectar las esquinas más destacadas
-    indices = esquinas > threshold * esquinas.max()  # Filtrar las esquinas
-    print(f"Esquinas detectadas: {len(indices)}")
-
-    # Coordenadas de las esquinas
-    coords = [(j, i) for i in range(0, indices.shape[0]) for j in range(0, indices.shape[1]) if indices[i, j]]
-    keypoints = [cv2.KeyPoint(float(x), float(y), 0) for (x, y) in coords]
-
-    # Calcular descriptores BRIEF en los puntos detectados
-    brief = cv2.xfeatures2d.BriefDescriptorExtractor_create()
-    keypoints, descriptores = brief.compute(imagen_preprocesada, keypoints)
-
-    if descriptores is None or len(keypoints) == 0:
-        print("No se encontraron descriptores.")
-        return None
-
-    # Según el Tema 3  : Detección y descripción de puntos de interés, en la diapositiva 99
-    # para emparejar descriptores binarios (como BRIEF o ORB)
-    # se utiliza BFMatcher con distancia de Hamming.
-    bf = cv2.BFMatcher(cv2.NORM_HAMMING)
-
-    # Se aplica knnMatch con k=2 para obtener los dos mejores matches por descriptor,
-    # siguiendo el metodo de emparejamiento mostrado en la diapositiva 99del tema 3,
-    # lo que permite aplicar el ratio test de Lowe para mejorar la calidad del emparejamiento.
-    matches_knn = bf.knnMatch(descriptores, descriptores_referencia, k=2)
-
-    # Aplicamos el ratio test de Lowe (0.75 es un valor típico) para filtrar matches ambiguos o falsos positivos.
-    good_matches = []
-    for m, n in matches_knn:
-        if m.distance < 0.95 * n.distance:
-            good_matches.append(m)
-
-    # Se calcula el tamaño de la imagen para dividirla en cuadrantes, con el objetivo de seleccionar
-    # un punto singular representativo en cada cuadrante, como exige el enunciado.
-    alto, ancho = imagen_preprocesada.shape[:2]
-
-    # Inicializamos la selección de los mejores matches por cuadrante
-    mejores_por_cuadrante = [None, None, None, None]  # TL, TR, BL, BR
-    distancias_min = [float('inf')] * 4
-
-    # Para cada good match, clasificamos su punto en uno de los 4 cuadrantes de la imagen
-    # y seleccionamos el match con menor distancia (más fiable) por cuadrante.
-    for match in good_matches:
-        punto = keypoints[match.queryIdx].pt
-        x, y = punto
-
-        if x < ancho / 2 and y < alto / 2:
-            idx = 0  # Cuadrante superior izquierdo. Primera coordenada
-        elif x >= ancho / 2 and y < alto / 2:
-            idx = 1  # Cuadrante superior derecho. Segunda coordenada
-        elif x < ancho / 2 and y >= alto / 2:
-            idx = 3  # Cuadrante inferior izquierdo. Ultima coordenada
-        else:
-            idx = 2  # Cuadrante inferior derecho. Tercera coordenada
-
-        if match.distance < distancias_min[idx]:
-            distancias_min[idx] = match.distance
-            mejores_por_cuadrante[idx] = punto
-
-    # Si alguno de los cuadrantes no tiene punto asignado, significa que no se detectaron las 4 esquinas.
-    if None in mejores_por_cuadrante:
-        print("No se pudieron detectar las 4 esquinas.")
-        return None
-
-    # Devolver los 4 puntos seleccionados, que deberían corresponder a las esquinas de la hoja.
-    return mejores_por_cuadrante
-
-# Esta función carga los descriptores BRIEF de referencia a partir de las coordenadas obtenidas con https://www.robots.ox.ac.uk/~vgg/software/via/
-#
-# Coordenadas guardadas en coordenadas.txt
-#
-# La idea es usar estos puntos clave para extraer descriptores BRIEF, que luego servirán como referencia
-# para el emparejamiento
-
-def cargar_descriptores_referencia(archivo_coordenadas='coordenadas.txt'):
     # Inicializamos el descriptor BRIEF
     brief = cv2.xfeatures2d.BriefDescriptorExtractor_create()
 
-    # Lista donde se irán acumulando todos los descriptores extraídos de cada imagen de referencia.
-    descriptores_totales = []
+    # Lista donde se irán acumulando todos los descriptores extraídos de las imagenes de entrenamiento
+    listaDescriptores = []
 
-    # Abrimos el archivo de coordenadas en modo lectura.
-    with open(archivo_coordenadas, 'r') as file:
-        for linea in file:
+    # Abrimos el archivo de coordenadas
+    with open(rutaCoordenadas, 'r') as coordenadasTxt:
+        for linea in coordenadasTxt:
 
             # Separamos el nombre del archivo de imagen de la lista de coordenadas.
-            nombre_imagen, lista_coordenadas = linea.strip().split(':', 1)
-            nombre_imagen = nombre_imagen.strip()
-            lista_coordenadas = lista_coordenadas.strip()
+            nombreImagen,coordenadas = linea.strip().split(':', 1)
+            nombreImagen = nombreImagen.strip()
+            coordenadas = coordenadas.strip()
 
-            # Eliminamos corchetes y paréntesis, luego separamos por coma y agrupamos pares
-            lista_coordenadas = lista_coordenadas.replace('[', '').replace(']', '')
-            pares = lista_coordenadas.split('),')
+            # Eliminamos corchetes y paréntesis, luego separamos por coma y agrupamos las coordenadas en pares
+            coordenadas= coordenadas.replace('[', '').replace(']', '')
+            pares = coordenadas.split('),')
             puntos = []
             for par in pares:
-                par = par.replace('(', '').replace(')', '').strip()
+                par= par.replace('(', '').replace(')', '').strip()
                 if par:
-                    x_str, y_str = par.split(',')
-                    x = float(x_str.strip())
-                    y = float(y_str.strip())
+                    coordenadaX, coordenadaY= par.split(',')
+                    x = float(coordenadaX.strip())
+                    y= float(coordenadaY.strip())
                     puntos.append((x, y))
 
             # Creamos los keypoints a partir de las coordenadas sacadas de coordenadas.txt
             # https://stackoverflow.com/questions/29415719/how-do-i-create-keypoints-to-compute-sift
-            keypoints = [cv2.KeyPoint(float(x), float(y), 0) for (x, y) in puntos]
+            puntosClave = [cv2.KeyPoint(float(x), float(y), 0) for (x, y) in puntos]
 
-            # Calculamos los descriptores BRIEF en las posiciones indicadas.
-            imagen = cv2.imread("learning/" + nombre_imagen)
+            # Calculamos los descriptores BRIEF en las posiciones indicadas de cada imagen de entrenamiento en niveles de gris para que los detecte mejor.
+            imagen = cv2.imread("learning/"+ nombreImagen)
             if imagen is None:
-                print("No se pudo cargar la imagen de entrenamiento:", nombre_imagen)
+                print("No se pudo cargar la imagen de entrenamiento:",nombreImagen)
                 exit()
 
-            gris = cv2.cvtColor(imagen, cv2.COLOR_BGR2GRAY)
-            _, descriptores = brief.compute(gris, keypoints)
-
+            imagenGris = cv2.cvtColor(imagen, cv2.COLOR_BGR2GRAY)
+            _, descriptores = brief.compute(imagenGris, puntosClave)
 
             # Añadimos los descriptores calculados a la lista de todos los descriptores
-            descriptores_totales.extend(descriptores)
+            listaDescriptores.extend(descriptores)
 
-    # Convertimos la lista final a un array de Numpy y lo devolvemos.
-    return np.array(descriptores_totales)
+    # Convertimos la lista final a un array de Numpy para que lo utilice bien el detector de esquinas Harris y lo devolvemos.
+    return np.array(listaDescriptores)
+
+
+
+
+# Detectar esquinas de las hojas de papel con los descriptores cargados de las imágenes de entrenamiento
+def DetectarEsquinas(imagenProcesada, descriptoresReferencia):
+    # Ya la recibimos en gris
+    # Parámetros de Harris
+    umbral = 0.05           # Umbral para filtrar las esquinas
+    blocksize = 7           # Tamaño de la ventana
+    ksize = 7               # Tamaño del kernel de Sobel
+    k = 0.05                # Parámetro libre de la ecuación de Harris
+
+    # Detectar esquinas con Harris
+    esquinas = cv2.cornerHarris(imagenProcesada, blocksize, ksize, k)
+
+    # Umbral para detectar las esquinas más destacadas
+    esquinas = esquinas > umbral * esquinas.max()  # Filtrar las esquinas por el umbral
+
+    # Coordenadas de las esquinas
+    coordenadas = [(j, i) for i in range(0, esquinas.shape[0]) for j in range(0, esquinas.shape[1]) if esquinas[i, j]]
+    puntosClave = [cv2.KeyPoint(float(x), float(y), 0) for (x, y) in coordenadas]
+
+    # Calcular descriptores BRIEF en los puntos detectados con Harris
+    brief = cv2.xfeatures2d.BriefDescriptorExtractor_create()
+    puntosClave, descriptores = brief.compute(imagenProcesada, puntosClave)
+
+    if descriptores is None or len(puntosClave) == 0:
+        print("No se han encontrado descriptores o puntos clave.")
+        exit()
+
+    # Según el Tema 3: Detección y descripción de puntos de interés, en la diapositiva 99
+    # para emparejar descriptores binarios (como BRIEF o ORB)
+    # se utiliza BFMatcher con distancia de Hamming.
+    bf = cv2.BFMatcher(cv2.NORM_HAMMING)
+
+    # Se aplica knnMatch (Algoritmo K Vecinos más cercanos) con k=2 para obtener los dos mejores matches por descriptor,
+    # siguiendo el método de emparejamiento mostrado en la diapositiva 99 del tema 3,
+    # lo que permite aplicar el ratio test de Lowe para mejorar la calidad del emparejamiento.
+    matches = bf.knnMatch(descriptores, descriptoresReferencia, k=2)
+
+    # Aplicamos el ratio test de Lowe (0.95 es un valor adaptado) para filtrar matches ambiguos o falsos positivos.
+    good = []
+    for m, n in matches:
+        if m.distance < 0.95 * n.distance:
+            good.append(m)
+
+    # Se calcula el tamaño de la imagen para dividirla en cuadrantes o esquinas, con el objetivo de seleccionar
+    # un punto singular representativo en cada esquina, como exige el enunciado.
+    alto, ancho = imagenProcesada.shape[:2]
+
+    # Inicializamos la selección de los mejores emparejamientos por esquina
+    esquinasFinales = [None]*4 
+    distanciasMinimas = [float('inf')] * 4
+
+    # Este algoritmo no es muy complejo, basicamente filtramos los mejores emparejamientos por distancia y diferenciandolos dependiendo de a que esquina pertenecen porque sino es un caos
+    # Para cada good match, clasificamos su punto en uno de los 4 cuadrantes de la imagen
+    # y seleccionamos el match con menor distancia (más fiable) por cuadrante o esquina.
+    for match in good:
+        punto = puntosClave[match.queryIdx].pt
+        x, y = punto
+
+        if x < ancho / 2 and y < alto / 2:
+            esquina = 0  # Cuadrante/ esquina superior izquierda
+        elif x >= ancho / 2 and y < alto / 2:
+            esquina = 1  # Cuadrante/ esquina superior derecha
+        elif x >= ancho / 2 and y >= alto / 2:
+            esquina = 2  # Cuadrante/ esquina inferior derecha
+        else:
+            esquina = 3  # Cuadrante/ esquina inferior izquierda
+
+        # Si se cumple la distancia minima para esa esquina en específico, hay que actualizar la distancia y la esquina final elegida.
+        if match.distance < distanciasMinimas[esquina]:
+            distanciasMinimas[esquina] = match.distance
+            esquinasFinales[esquina] = punto
+
+    # Si alguno de los cuadrantes no tiene punto asignado, significa que no se detectaron las 4 esquinas.
+    if None in esquinasFinales:
+        print("No se pudieron detectar las 4 esquinas.")
+        exit()
+
+    # Devolver los 4 puntos seleccionados, que deberían corresponder a las esquinas de la hoja.
+    return esquinasFinales
+
 
 
 # Rectificación de la imagen usando una transformación de perspectiva
@@ -204,13 +214,14 @@ def RectificarImagen(imagen, esquinas):
     # Transformación de la imagen
     return cv2.warpPerspective(imagen, matrizPerspectiva, (ancho, alto))
 
-# Prueba mostrar imagen
-def mostrar_redimensionada(titulo, imagen, escala=0.2):
+# Prueba mostrar imagen por pantalla y redimensionarla para que no ocupe todo
+def mostrarRedimensionada(titulo, imagen):
+    escala=0.2
     alto, ancho = imagen.shape[:2]
     redimensionada = cv2.resize(imagen, (int(ancho * escala), int(alto * escala)))
     cv2.imshow(titulo, redimensionada)
 
-# Main
+# main
 if __name__ == "__main__":
     # Comprobar los parámetros
     if len(sys.argv) != 3:
@@ -226,40 +237,33 @@ if __name__ == "__main__":
 
     # Comprobar imagen cargada
     if imagen is None:
-        print("Imagen no válida o no cargada.")
+        print("Imagen no válida o no cargada")
         exit()
 
     # Preproceso de la imagen
     imagenPreprocesada = PreprocesarImagen(imagen)
 
     # Cargar descriptores de referencia
-    print(" Cargando descriptores de referencia...")
-    #descriptores_ref = np.load("descriptores_brief.npy")
-    descriptores_ref = cargar_descriptores_referencia()
+    descriptoresReferencia= CargarDescriptoresReferencia("coordenadas.txt")
 
-    # Detectar esquinas automáticamente
-    print(" Detectando esquinas automáticamente...")
-    esquinas = DetectarEsquinasAutomaticas(imagenPreprocesada, descriptores_ref)
+    # Detectar esquinas hojas de papel
+    esquinas = DetectarEsquinas(imagenPreprocesada, descriptoresReferencia)
 
     if esquinas is None:
-        print(" No se pudieron detectar las 4 esquinas necesarias.")
+        print(" No se pudieron detectar las 4 esquinas ")
         exit()
 
-    print(f"Esquinas detectadas: {esquinas}")
-
     # Rectificar imagen usando las esquinas detectadas
-    print("⏳ Rectificando imagen...")
     imagenRectificada = RectificarImagen(imagen, esquinas)
 
-    # Mostrar imágenes para debug
-    mostrar_redimensionada('Imagen original', imagen)
-    mostrar_redimensionada('Imagen preprocesada', imagenPreprocesada)
-    mostrar_redimensionada('Imagen rectificada', imagenRectificada)
+    # Mostrar imágenes para debug y no tener que guardarlas todo el tiempo
+    #mostrarRedimensionada('Imagen original', imagen)
+    #mostrarRedimensionada('Imagen preprocesada', imagenPreprocesada)
+    #mostrarRedimensionada('Imagen rectificada', imagenRectificada)
 
     # Guardar imagen rectificada
     cv2.imwrite(imagenSalida, imagenRectificada)
-    print(f" Imagen rectificada guardada como: {imagenSalida}")
+    print("Imagen escaneada guardada como:", imagenSalida)
 
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
+    
 
