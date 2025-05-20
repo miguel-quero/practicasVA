@@ -34,17 +34,31 @@ def PreprocesarImagen(imagen):
     # Umbralizar imagen -> Imagen bitonal
     _, imagenUmbralizada = cv2.threshold(imagenGris, int(umbral), 255, cv2.THRESH_BINARY)
 
-    # Morfología para limpiar ruido, erosión y dilatación con kernel 3x3
+    # Morfología para limpiar ruido, erosión y dilatación con kernel 3x3. Apertura
     kernel = np.ones((3, 3), np.uint8)
-    imagenPreprocesada = cv2.erode(imagenUmbralizada, kernel)
-    imagenPreprocesada = cv2.dilate(imagenPreprocesada, kernel)
+    imagenPreprocesada = cv2.dilate(imagenUmbralizada, kernel)
+    imagenPreprocesada = cv2.erode(imagenPreprocesada, kernel)
 
     return imagenPreprocesada
 
 def DetectarEsquinasAutomaticas(imagen_preprocesada, descriptores_referencia):
-    # Detectar puntos clave usando FAST, adecuado para combinar con BRIEF (descriptor binario)
-    fast = cv2.FastFeatureDetector_create()
-    keypoints = fast.detect(imagen_preprocesada, None)
+    # Ya la recibimos en gris
+    # Parametros de Harris
+    threshold = 0.01
+    blockSize =5  # Tamaño de la ventana
+    ksize = 3  # Tamaño del kernel de Sobel
+    k = 0.04  # Factor de Harris
+
+    # Detectar esquinas con Harris
+    esquinas = cv2.cornerHarris(imagen_preprocesada, blockSize, ksize, k)
+
+    # Umbral para detectar las esquinas más destacadas
+    indices = esquinas > threshold * esquinas.max()  # Filtrar las esquinas
+    print(f"Esquinas detectadas: {len(indices)}")
+
+    # Coordenadas de las esquinas
+    coords = [(j, i) for i in range(0, indices.shape[0]) for j in range(0, indices.shape[1]) if indices[i, j]]
+    keypoints = [cv2.KeyPoint(float(x), float(y), 0) for (x, y) in coords]
 
     # Calcular descriptores BRIEF en los puntos detectados
     brief = cv2.xfeatures2d.BriefDescriptorExtractor_create()
@@ -60,14 +74,14 @@ def DetectarEsquinasAutomaticas(imagen_preprocesada, descriptores_referencia):
     bf = cv2.BFMatcher(cv2.NORM_HAMMING)
 
     # Se aplica knnMatch con k=2 para obtener los dos mejores matches por descriptor,
-    # siguiendo el método de emparejamiento mostrado en la diapositiva 99del tema 3,
+    # siguiendo el metodo de emparejamiento mostrado en la diapositiva 99del tema 3,
     # lo que permite aplicar el ratio test de Lowe para mejorar la calidad del emparejamiento.
     matches_knn = bf.knnMatch(descriptores, descriptores_referencia, k=2)
 
     # Aplicamos el ratio test de Lowe (0.75 es un valor típico) para filtrar matches ambiguos o falsos positivos.
     good_matches = []
     for m, n in matches_knn:
-        if m.distance < 0.75 * n.distance:
+        if m.distance < 0.9 * n.distance:
             good_matches.append(m)
 
     # Se calcula el tamaño de la imagen para dividirla en cuadrantes, con el objetivo de seleccionar
