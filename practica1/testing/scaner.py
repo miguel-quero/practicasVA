@@ -36,7 +36,9 @@ def PreprocesarImagen(imagen):
 
     # Morfología para limpiar ruido, erosión y dilatación con kernel 3x3. Apertura
     kernel = np.ones((3, 3), np.uint8)
-    imagenPreprocesada = cv2.erode(imagenUmbralizada, kernel)
+    imagenPreprocesada = cv2.GaussianBlur(imagenUmbralizada, (3, 3), 1)
+    imagenPreprocesada = cv2.erode(imagenPreprocesada, kernel)
+    imagenPreprocesada = cv2.dilate(imagenPreprocesada, kernel)
     imagenPreprocesada = cv2.dilate(imagenPreprocesada, kernel)
     
 
@@ -154,9 +156,6 @@ def cargar_descriptores_referencia(archivo_coordenadas='coordenadas.txt'):
                     x = float(x_str.strip())
                     y = float(y_str.strip())
                     puntos.append((x, y))
-
-            #Debug
-            print(nombre_imagen, lista_coordenadas)
 
             # Creamos los keypoints a partir de las coordenadas sacadas de coordenadas.txt
             # https://stackoverflow.com/questions/29415719/how-do-i-create-keypoints-to-compute-sift
