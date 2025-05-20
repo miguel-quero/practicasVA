@@ -45,10 +45,10 @@ def PreprocesarImagen(imagen):
 def DetectarEsquinasAutomaticas(imagen_preprocesada, descriptores_referencia):
     # Ya la recibimos en gris
     # Parametros de Harris
-    threshold = 0.01
-    blockSize =5  # Tamaño de la ventana
-    ksize = 3  # Tamaño del kernel de Sobel
-    k = 0.04  # Factor de Harris
+    threshold = 0.05
+    blockSize = 7  # Tamaño de la ventana
+    ksize = 7  # Tamaño del kernel de Sobel
+    k = 0.05  # Factor de Harris
 
     # Detectar esquinas con Harris
     esquinas = cv2.cornerHarris(imagen_preprocesada, blockSize, ksize, k)
@@ -82,7 +82,7 @@ def DetectarEsquinasAutomaticas(imagen_preprocesada, descriptores_referencia):
     # Aplicamos el ratio test de Lowe (0.75 es un valor típico) para filtrar matches ambiguos o falsos positivos.
     good_matches = []
     for m, n in matches_knn:
-        if m.distance < 0.9 * n.distance:
+        if m.distance < 0.95 * n.distance:
             good_matches.append(m)
 
     # Se calcula el tamaño de la imagen para dividirla en cuadrantes, con el objetivo de seleccionar
