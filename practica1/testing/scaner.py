@@ -36,8 +36,9 @@ def PreprocesarImagen(imagen):
 
     # Morfología para limpiar ruido, erosión y dilatación con kernel 3x3. Apertura
     kernel = np.ones((3, 3), np.uint8)
-    imagenPreprocesada = cv2.dilate(imagenUmbralizada, kernel)
-    imagenPreprocesada = cv2.erode(imagenPreprocesada, kernel)
+    imagenPreprocesada = cv2.erode(imagenUmbralizada, kernel)
+    imagenPreprocesada = cv2.dilate(imagenPreprocesada, kernel)
+    
 
     return imagenPreprocesada
 
@@ -162,7 +163,14 @@ def cargar_descriptores_referencia(archivo_coordenadas='coordenadas.txt'):
             keypoints = [cv2.KeyPoint(float(x), float(y), 0) for (x, y) in puntos]
 
             # Calculamos los descriptores BRIEF en las posiciones indicadas.
-            _, descriptores = brief.compute(imagen, keypoints)
+            imagen = cv2.imread("learning/" + nombre_imagen)
+            if imagen is None:
+                print("No se pudo cargar la imagen de entrenamiento:", nombre_imagen)
+                exit()
+
+            gris = cv2.cvtColor(imagen, cv2.COLOR_BGR2GRAY)
+            _, descriptores = brief.compute(gris, keypoints)
+
 
             # Añadimos los descriptores calculados a la lista de todos los descriptores
             descriptores_totales.extend(descriptores)
