@@ -65,7 +65,8 @@ def preprocesar_imagen_rgb(imagen_path, tamaño=(400, 300)):
     vec = img.flatten().astype(np.float32).reshape(1, -1)
     return vec
 
-if _name_ == "_main_":
+if __name__ == "__main__":
+
     try:
         print("Ejecutando doc_classifier.py ...")
         if len(sys.argv) != 2:
