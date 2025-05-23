@@ -46,8 +46,8 @@ def preprocesar_imagen_c3(imagen_path, esquinas_dict, tamaño=(400, 300)):
     if base_name not in esquinas_dict:
         raise ValueError(f"Coordenadas no encontradas para {base_name}")
     img_rect = RectificarImagen(img, esquinas_dict[base_name])
-    img_gray = cv2.cvtColor(img_rect, cv2.COLOR_BGR2GRAY)
-    img_resized = cv2.resize(img_gray, tamaño)
+    # Mantener imagen en color para que coincida con entrenamiento
+    img_resized = cv2.resize(img_rect, tamaño)
     vec = img_resized.flatten().astype(np.float32).reshape(1, -1)
     return vec
 

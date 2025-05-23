@@ -33,12 +33,12 @@ def cargar_imagenes(ruta_base, tamaño=(400, 300)):
     print(f"Total imágenes cargadas: {len(X)}")
     return np.array(X, dtype=np.float32), np.array(y, dtype=np.int32), clases_encontradas
 
-def cargar_imagenes_rectificadas_test(ruta_test, esquinas_dict, tamaño=(400, 300)):
+def cargar_imagenes_rectificadas(ruta_base, esquinas_dict, tamaño=(400, 300)):
     X, y = [], []
-    clases_encontradas = sorted(os.listdir(ruta_test))
-    print(f"Cargando imágenes rectificadas (solo test) desde: {ruta_test}")
+    clases_encontradas = sorted(os.listdir(ruta_base))
+    print(f"Cargando imágenes rectificadas desde: {ruta_base}")
     for etiqueta, clase in enumerate(clases_encontradas):
-        carpeta = os.path.join(ruta_test, clase)
+        carpeta = os.path.join(ruta_base, clase)
         if not os.path.isdir(carpeta):
             continue
         for archivo in os.listdir(carpeta):
@@ -54,13 +54,15 @@ def cargar_imagenes_rectificadas_test(ruta_test, esquinas_dict, tamaño=(400, 30
                 img = cv2.imread(ruta_img)
                 if img is None:
                     continue
-                img_rect = RectificarImagen(img, esquinas)  # Rectificación en color
-                img_resized = cv2.resize(img_rect, tamaño)  # Mantener 3 canales
+                img_rect = RectificarImagen(img, esquinas)
+                img_resized = cv2.resize(img_rect, tamaño)
                 vec = img_resized.flatten().astype(np.float32)
                 X.append(vec)
                 y.append(etiqueta)
-    print(f"Total imágenes rectificadas de test cargadas: {len(X)}")
+    print(f"Total imágenes rectificadas cargadas desde {ruta_base}: {len(X)}")
     return np.array(X, dtype=np.float32), np.array(y, dtype=np.int32), clases_encontradas
+
+
 
 def entrenar_solo_svm(X_train, y_train, X_test, y_test):
     pprint("Entrenando SVM sin reducción (C1)...")
@@ -182,18 +184,15 @@ if __name__ == "__main__":
             joblib.dump(lda_c2, "lda_c2.pkl")
             joblib.dump(svm_c2, "svm_c2.pkl")
 
+            # Leer coordenadas de todas las imágenes (train y test)
             esquinas_dict = leer_esquinas(txt_coordenadas)
 
-            # Para C3, se usa imágenes originales de entrenamiento sin rectificar
-            # y para test se rectifican al vuelo con las coordenadas
-            X_train_c3 = X_train.copy()
-            y_train_c3 = y_train.copy()
+            # Cargar imágenes rectificadas para entrenamiento y test usando coordenadas
+            X_train_c3, y_train_c3, clases_c3 = cargar_imagenes_rectificadas(ruta_train, esquinas_dict)
+            X_test_c3, y_test_c3, _ = cargar_imagenes_rectificadas(ruta_test, esquinas_dict)
 
-            X_test_c3, y_test_c3, clases_c3 = cargar_imagenes_rectificadas_test(ruta_test, esquinas_dict)
-
-            # Validar que no estén vacíos
             if X_train_c3.size == 0 or X_test_c3.size == 0:
-                raise ValueError("No hay datos para entrenar o evaluar el clasificador C3.")
+                raise ValueError("No hay datos para entrenar o evaluar el clasificador C3 con imágenes rectificadas.")
 
             print("Normalizando características rectificadas...")
             scaler_c3 = StandardScaler()
@@ -204,6 +203,7 @@ if __name__ == "__main__":
             svm_c3 = entrenar_svm(X_train_c3_scaled, y_train_c3, X_test_c3_scaled, y_test_c3)
             joblib.dump(svm_c3, "svm_c3.pkl")
             joblib.dump(clases_c3, "clases_c3.pkl")
+
 
             print("Modelos y etiquetas guardados correctamente.")
 
