@@ -222,7 +222,6 @@ if __name__ == "__main__":
             # Utilizar funcion reducción funcionalidad (entrenar_lda_svm) 3.2
             lda_c4, svm_c4 = entrenar_lda_svm(X_train_c3_scaled, y_train_c3, X_test_c3_scaled, y_test_c3)
             y_pred_c4 = svm_c4.predict(lda_c4.transform(X_test_c3_scaled))
-            # Combinar con muestras rectificadas C3
             acc_c4 = accuracy_score(y_test_c3, y_pred_c4)
             print(f"Accuracy C4: {acc_c4:.4f}")
 
