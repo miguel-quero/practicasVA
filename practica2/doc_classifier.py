@@ -142,6 +142,21 @@ def preprocesar_imagen_c3(imagen_path, esquinas_dict, tamaño=(400, 300)):
     scaler_c3 = joblib.load("scaler_c3.pkl")
     return scaler_c3.transform(vec)
 
+def preprocesar_imagen_rectificada_lda_c4(imagen_path, esquinas_dict, tamaño=(400, 300)):
+    img = cv2.imread(imagen_path)
+    if img is None:
+        raise ValueError(f"No se pudo cargar la imagen: {imagen_path}")
+    base_name = os.path.basename(imagen_path)
+    if base_name not in esquinas_dict:
+        raise ValueError(f"Coordenadas no encontradas para {base_name}")
+    img_rect = RectificarImagen(img, esquinas_dict[base_name])
+    img_resized = cv2.resize(img_rect, tamaño)
+    vec = img_resized.flatten().astype(np.float32).reshape(1, -1)
+    scaler_c3 = joblib.load("scaler_c3.pkl")
+    lda_c4 = joblib.load("lda_c4.pkl")
+    vec_scaled = scaler_c3.transform(vec)
+    return lda_c4.transform(vec_scaled)
+
 
 if __name__ == "__main__":
     try:
@@ -204,6 +219,15 @@ if __name__ == "__main__":
             joblib.dump(svm_c3, "svm_c3.pkl")
             joblib.dump(clases_c3, "clases_c3.pkl")
 
+            # Utilizar funcion reducción funcionalidad (entrenar_lda_svm) 3.2
+            lda_c4, svm_c4 = entrenar_lda_svm(X_train_c3_scaled, y_train_c3, X_test_c3_scaled, y_test_c3)
+            y_pred_c4 = svm_c4.predict(lda_c4.transform(X_test_c3_scaled))
+            # Combinar con muestras rectificadas C3
+            acc_c4 = accuracy_score(y_test_c3, y_pred_c4)
+            print(f"Accuracy C4: {acc_c4:.4f}")
+
+            joblib.dump(lda_c4, "lda_c4.pkl")
+            joblib.dump(svm_c4, "svm_c4.pkl")
 
             print("Modelos y etiquetas guardados correctamente.")
 
@@ -218,6 +242,8 @@ if __name__ == "__main__":
             clases_c3 = joblib.load("clases_c3.pkl")
             scaler_c3 = joblib.load("scaler_c3.pkl")
             svm_c3 = joblib.load("svm_c3.pkl")
+            lda_c4 = joblib.load("lda_c4.pkl")
+            svm_c4 = joblib.load("svm_c4.pkl")
             esquinas_dict = leer_esquinas("coordenadasprac2.txt")
 
         vec = preprocesar_imagen_rgb(imagen_path)
@@ -228,9 +254,13 @@ if __name__ == "__main__":
         vec_c3 = preprocesar_imagen_c3(imagen_path, esquinas_dict)
         pred_c3 = svm_c3.predict(vec_c3)[0]
 
+        vec_c4 = preprocesar_imagen_rectificada_lda_c4(imagen_path, esquinas_dict)
+        pred_c4 = svm_c4.predict(vec_c4)[0]
+
         print(f"\nClasificador C1 predice: {clases[pred_c1]}")
         print(f"Clasificador C2 predice: {clases[pred_c2]}")
         print(f"Clasificador C3 predice: {clases_c3[pred_c3]}")
+        print(f"Clasificador C4 predice: {clases_c3[pred_c4]}")
 
     except Exception as e:
         print(f"Error inesperado: {e}")
