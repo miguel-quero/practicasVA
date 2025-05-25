@@ -219,7 +219,7 @@ if __name__ == "__main__":
             joblib.dump(svm_c3, "svm_c3.pkl")
             joblib.dump(clases_c3, "clases_c3.pkl")
 
-            # Utilizar funcion reducción funcionalidad (entrenar_lda_svm) C2 + rectificadas C3
+            # Utilizar funcion reducción dimensionalidad (entrenar_lda_svm) C2 + rectificadas C3
             lda_c4, svm_c4 = entrenar_lda_svm(X_train_c3_scaled, y_train_c3, X_test_c3_scaled, y_test_c3)
             y_pred_c4 = svm_c4.predict(lda_c4.transform(X_test_c3_scaled))
             acc_c4 = accuracy_score(y_test_c3, y_pred_c4)
