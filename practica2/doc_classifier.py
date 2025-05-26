@@ -4,6 +4,8 @@ import sys
 import os # Libreria para cargar las imagenes
 import cv2
 import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay, classification_report
 
 import joblib # La utilizamos para guardar los modelos creados de la practica.
 from sklearn.preprocessing import StandardScaler
@@ -16,7 +18,7 @@ import ast  # Para parsear coordenadas desde txt
 
 #                                                                   Funciones para cargar imagenes    
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
-# Cargar imagenes, vectores y etiquetas de las clases
+# Cargar imagenes, vectores y etiquetas de las clasesC1C2
 # Fuente de la funcion flatten: https://stackoverflow.com/questions/46621942/flattening-and-unflattening-an-image
 def cargarImagenes(ruta):
     tamaño=(400,300)
@@ -25,7 +27,7 @@ def cargarImagenes(ruta):
     #Vectores imagenes y etiquetas
     x = []
     y = []
-    # Se ordenan las clases alfabéticamente
+    # Se ordenan las clasesC1C2 alfabéticamente
     clasesEncontradas = sorted(os.listdir(ruta))
     print("Clases: ", clasesEncontradas)
 
@@ -62,7 +64,7 @@ def cargarImagenesRectificadas(ruta, rutaCoordenadas):
     x = []
     y = []
 
-    # Se ordenan las clases alfabéticamente
+    # Se ordenan las clasesC1C2 alfabéticamente
     clasesEncontradas = sorted(os.listdir(ruta))
     
     # Busca las imagenes en las carpetas
@@ -102,70 +104,46 @@ def cargarImagenesRectificadas(ruta, rutaCoordenadas):
 
 # Clasificador 1: SVM
 def EntrenamientoSVMC1(xTrain, yTrain, xTest, yTest):
-    print("Entrenamiento SVM (C1)")
-    # Crear clasificador SVM
-    svm =SVC(kernel='linear',random_state=42)
+    # Crear clasificador SVM con kernel lineal
+    svm = SVC(kernel='linear', random_state=42)
 
-    #Entrenamiento con las muestras de entrenamiento
-    svm.fit(xTrain,yTrain)
-
-    # Clasificación de las muestras de test
-    yPredict =svm.predict(xTest)
-
-    # Métrica de precision
-    accuracy =accuracy_score(yTest,yPredict)
-    print("Accuracy C1: "+str(round(accuracy,4)))
+    # Entrenamiento con las muestras de entrenamiento
+    svm.fit(xTrain, yTrain)
 
     # Se devuelve el clasificador entrenado
-    return svm, accuracy
+    return svm
+
 
 # Clasificador 2: LDA + SVM
 def EntrenamientoLDASVMC2(xTrain, yTrain, xTest, yTest):
-    print("Entrenamiento LDA + SVM (C2)")
+    # Obtener número de clases para el LDA
+    numClases = len(np.unique(yTrain))
 
-    # Conseguir numero de clases para el LDA
-    numClases =len(np.unique(yTrain))
+    # Crear y entrenar el LDA para reducción de dimensionalidad
+    lda = LinearDiscriminantAnalysis(n_components=numClases - 1)
+    xTrainLDA= lda.fit_transform(xTrain, yTrain)
+    xTestLDA= lda.transform(xTest)
 
-    # Crear el LDA
-    lda= LinearDiscriminantAnalysis(n_components=numClases - 1)
-    # Aplicar el LDA a las muestras de entrenamiento y Test
-    xTrainLDA= lda.fit_transform(xTrain,yTrain)
-    xTestLDA = lda.transform(xTest)
-
-    # Crear clasificador SVM
-    svm = SVC(kernel='linear',random_state=42)
-
-    #Entrenamiento con las muestras de entrenamiento del LDA
+    # Crear y entrenar el SVM con datos transformados por LDA
+    svm= SVC(kernel='linear',random_state=42)
     svm.fit(xTrainLDA, yTrain)
 
-    # Clasificación de las muestras de test del LDA
-    yPredict = svm.predict(xTestLDA)
+    # Se devuelven el LDA y el SVM entrenados
+    return lda,svm
 
-    # Métrica de precision
-    accuracy = accuracy_score(yTest, yPredict)
-    print("Accuracy C2: "+ str(round(accuracy,4)))
 
-    # Se devuelven el SVM y el LDA ya entrenados
-    return lda, svm
+# Clasificador 3: SVM con imágenes rectificadas
+def EntrenamientoSVMC3(xTrain, yTrain, xTest, yTest):
 
-# Clasificador 3: SVM con imagenes rectificadas
-def EntrenamientoSVMC3(xTrain, yTrain,xTest,yTest):
-    print("Entrenamiento SVM con imagenes rectificadas (C3)")
-    # Crear clasificador SVM
+    # Crear clasificador SVM con kernel lineal
     svm =SVC(kernel='linear',random_state=42)
 
-    #Entrenamiento con las muestras de entrenamiento
-    svm.fit(xTrain,yTrain)
+    # Entrenamiento con las muestras de entrenamiento
+    svm.fit(xTrain, yTrain)
 
-    # Clasificación de las muestras de test
-    yPredict = svm.predict(xTest)
-
-    # Métrica de precision
-    accuracy =accuracy_score(yTest,yPredict)
-    print("Accuracy C3: "+ str(round(accuracy,4)))
-
-    # Se devuelve el clasificador SVM entrenado
+    # Se devuelve el clasificador entrenado
     return svm
+
 
 
 # --------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -285,6 +263,9 @@ def PreprocesarImagenRectificadaLDAC4(rutaImagen, esquinas):
     return ldaC4.transform(vectorC3)
 
 
+
+   
+
 # --------------------------------------------------------------------------------------------------------------------------------------------------------
 #                                                                   Programa Principal
 # main
@@ -296,150 +277,125 @@ def PreprocesarImagenRectificadaLDAC4(rutaImagen, esquinas):
 
 if __name__ == "__main__":
 
-    # Comprobar que se ha pasado correctamente el nombre de la imagen a clasificar como argumento
+    # Comprobación de argumentos
     if len(sys.argv) != 2:
         print("Error. Ejemplo: python doc_classifier.py imagen.jpg")
         exit()
 
-    # Obtener la ruta de la imagen a clasificar
+    # Comprobar imagen está en la ruta
     rutaImagen = sys.argv[1]
     if not os.path.exists(rutaImagen):
         print("Imagen no encontrada: ", rutaImagen)
         exit()
 
-    # Comprobar si ya existen los modelos previamente entrenados
-    modelos = all(os.path.exists(modelo) for modelo in ["svmC1.pkl","ldaC2.pkl","svmC2.pkl", "clases.pkl", "scaler.pkl","svmC3.pkl","scalerC3.pkl", "clasesC3.pkl","coordenadasprac2.txt"])
-    print("Modelos existentes: ", modelos)
+    # Comprobar si existen todos los modelos y archivos necesarios
+    modelos = all(os.path.exists(modelo) for modelo in ["svmC1.pkl","ldaC2.pkl","svmC2.pkl", "clasesC1C2.pkl", "scaler.pkl","svmC3.pkl","scalerC3.pkl", "clasesC3C4.pkl","coordenadasprac2.txt"])
+    print("Modelos: ", modelos)
 
-    # Si no existen los modelos, se realiza el entrenamiento desde cero
+
+    # Rutas de las carpetas de entrenamiento y test, y del archivo de coordenadas
+    rutaTrain = 'MUESTRA_PRACTICA2_2025/Aprendizaje'
+    rutaTest = 'MUESTRA_PRACTICA2_2025/Test'
+    coordenadasTXT = 'coordenadasprac2.txt'
+
+    # Leer esquinas para rectificación
+    esquinas = LeerEsquinas(coordenadasTXT)
+        
     if not modelos:
-        print("No se han encontrado modelos, creando modelos")
+        # Si no existen modelos, entrenar y guardar todos los modelos
 
-        # Rutas de las carpetas de entrenamiento y test, y del archivo de coordenadas
-        rutaTrain = 'MUESTRA_PRACTICA2_2025/Aprendizaje'
-        rutaTest = 'MUESTRA_PRACTICA2_2025/Test'
-        coordenadasTXT = 'coordenadasprac2.txt'
-
-        # Cargar imágenes RGB y etiquetas para entrenamiento y test (clasificadores C1 y C2)
-        xTrain, yTrain, clases = cargarImagenes(rutaTrain)
+        # Cargar imágenes para entrenamiento y testeo (RGB)
+        xTrain, yTrain, clasesC1C2 = cargarImagenes(rutaTrain)
         xTest, yTest, _ = cargarImagenes(rutaTest)
 
-        # Normalizar vectores de características
-        print("Normalizando características con StandardScaler para mejorar la precisión")
+        # Normalizar datos RGB
         scaler = StandardScaler()
         xTrainN = scaler.fit_transform(xTrain)
         xTestN = scaler.transform(xTest)
+        # Se guardar también el normalizador de características para el C1 y C2
         joblib.dump(scaler, "scaler.pkl")
 
-        # Entrenamiento del clasificador C1: SVM sobre imágenes RGB
-        svmC1, accuracyC1 = EntrenamientoSVMC1(xTrainN, yTrain, xTestN, yTest)
+        # Entrenar SVM C1 con datos RGB
+        print("Entrenamiento SVM (C1)")
+        svmC1= EntrenamientoSVMC1(xTrainN, yTrain, xTestN, yTest)
+        # Se guardan el SVM del C1 y las clases de las imagenes RGB
         joblib.dump(svmC1, "svmC1.pkl")
-        joblib.dump(clases, "clases.pkl")
+        joblib.dump(clasesC1C2, "clasesC1C2.pkl")
 
-
-
-        # Entrenamiento del clasificador C2: LDA + SVM sobre imágenes RGB
+        # Entrenar LDA + SVM C2 con datos RGB
+        print("Entrenamiento LDA + SVM (C2)")
         ldaC2, svmC2 = EntrenamientoLDASVMC2(xTrainN, yTrain, xTestN, yTest)
+        # Se guardan el LDA y el SVM del C2
         joblib.dump(ldaC2, "ldaC2.pkl")
         joblib.dump(svmC2, "svmC2.pkl")
 
-        # Leer coordenadas de las esquinas de todas las imágenes desde archivo
-        esquinas = LeerEsquinas(coordenadasTXT)
+        
 
-        # Cargar imágenes rectificadas para entrenamiento y test (clasificadores C3 y C4)
-        xTrainC3, yTrainC3, clasesC3 = cargarImagenesRectificadas(rutaTrain, esquinas)
+        # Cargar imágenes rectificadas para entrenamiento y testeo
+        xTrainC3, yTrainC3, clasesC3C4 = cargarImagenesRectificadas(rutaTrain, esquinas)
         xTestC3, yTestC3, _ = cargarImagenesRectificadas(rutaTest, esquinas)
 
-        # Normalizar vectores de características de imágenes rectificadas
+        # Normalizar datos rectificados
         scalerC3 = StandardScaler()
         xTrainC3N = scalerC3.fit_transform(xTrainC3)
         xTestC3N = scalerC3.transform(xTestC3)
+        # Se guardar también el normalizador de características para el C3 y C4
         joblib.dump(scalerC3, "scalerC3.pkl")
 
-        # Entrenamiento del clasificador C3: SVM sobre imágenes rectificadas
+        # Entrenar SVM C3 con datos rectificados
+        print("Entrenamiento SVM con imágenes rectificadas (C3)")
         svmC3 = EntrenamientoSVMC3(xTrainC3N, yTrainC3, xTestC3N, yTestC3)
+        # Guardar los archivos del SVM del C3 y las clases de los clasificadores C3 y C4 de las imágenes rectificadas
         joblib.dump(svmC3, "svmC3.pkl")
-        joblib.dump(clasesC3, "clasesC3.pkl")
+        joblib.dump(clasesC3C4, "clasesC3C4.pkl")
 
-        # Entrenamiento del clasificador C4: LDA + SVM sobre imágenes rectificadas
+        # Entrenar LDA + SVM C4 con datos rectificados
+        print("Entrenamiento LDA + SVM con imágenes rectificadas (C4)")
         ldaC4, svmC4 = EntrenamientoLDASVMC2(xTrainC3N, yTrainC3, xTestC3N, yTestC3)
-        yPredictC4 = svmC4.predict(ldaC4.transform(xTestC3N))
-        accuracyC4 = accuracy_score(yTestC3, yPredictC4)
-        print("Accuracy C4: "+str(round(accuracyC4,4)))
-
-
-        # Guarda los modelos entrenados
+        # Guardar los archivos del LDA y SVM del C4
         joblib.dump(ldaC4, "ldaC4.pkl")
         joblib.dump(svmC4, "svmC4.pkl")
 
-        print("Modelos y etiquetas guardados")
-
-    # Si ya existen los modelos, simplemente se cargan desde los archivos .pkl
     else:
+        # Cargar modelos ya entrenados y archivos necesarios
+
         print("Los modelos encontrados se están cargando")
-        clases = joblib.load("clases.pkl")
+
+        clasesC1C2 = joblib.load("clasesC1C2.pkl")
         scaler = joblib.load("scaler.pkl")
         ldaC2 = joblib.load("ldaC2.pkl")
         svmC2 = joblib.load("svmC2.pkl")
         svmC1 = joblib.load("svmC1.pkl")
 
-        clasesC3 = joblib.load("clasesC3.pkl")
+        clasesC3C4 = joblib.load("clasesC3C4.pkl")
         scalerC3 = joblib.load("scalerC3.pkl")
         svmC3 = joblib.load("svmC3.pkl")
         ldaC4 = joblib.load("ldaC4.pkl")
         svmC4 = joblib.load("svmC4.pkl")
-        esquinas = LeerEsquinas("coordenadasprac2.txt")
-        rutaTest = 'MUESTRA_PRACTICA2_2025/Test'
-        xTest, yTest, _ = cargarImagenes(rutaTest)
-        xTestN = scaler.transform(xTest)
 
-        esquinas = LeerEsquinas("coordenadasprac2.txt")
-        xTestC3, yTestC3, _ = cargarImagenesRectificadas(rutaTest, esquinas)
-        xTestC3N = scalerC3.transform(xTestC3)
-        accuracyC1 = accuracy_score(yTest, svmC1.predict(xTestN))
-        accuracyC4 = accuracy_score(yTestC3, svmC4.predict(ldaC4.transform(xTestC3N)))
-
-        
-
-
-    # Preprocesar la imagen pasada por argumento para cada uno de los clasificadores
+    # Vector RGB para SVM C1 y predicción del clasificador 1
     vector = PreprocesarImagenRGB(rutaImagen)
-    vectorLDAC2 = ldaC2.transform(vector)
-    predictC2 = svmC2.predict(vectorLDAC2)[0]
     predictC1 = svmC1.predict(vector)[0]
 
+
+    # Vector RGB con LDA para SVM C2 y predicción del clasificador 2
+    vectorLDAC2 = ldaC2.transform(vector)
+    predictC2 = svmC2.predict(vectorLDAC2)[0]
+
+
+    # Vector imagen rectificada para SVM C3, y predicción del clasificador 3
     vectorC3 = PreprocesarImagenC3(rutaImagen, esquinas)
     predictC3 = svmC3.predict(vectorC3)[0]
 
+    # Vector imagen rectificada con LDA para SVM C4, y predicción del clasificador 4
     vectorLDAC4 = PreprocesarImagenRectificadaLDAC4(rutaImagen, esquinas)
     predictC4 = svmC4.predict(vectorLDAC4)[0]
 
-    accuracyC2 = accuracy_score(yTest, svmC2.predict(ldaC2.transform(xTestN)))
-    accuracyC3 = accuracy_score(yTestC3, svmC3.predict(xTestC3N))
-
-
-    # Mostrar predicción de cada clasificador por pantalla
-    print("\n" + "-"*50)
-    print("RESULTADO DE CLASIFICACIÓN")
-    print("-"*50)
-    print(f"{'Clasificador':<25} {'Predicción':<20}")
-    print("-"*50)
-    print(f"{'C1 - SVM sobre RGB':<25} {clases[predictC1]:<20}")
-    print(f"{'C2 - LDA + SVM sobre RGB':<25} {clases[predictC2]:<20}")
-    print(f"{'C3 - SVM sobre rectificada':<25} {clasesC3[predictC3]:<20}")
-    print(f"{'C4 - LDA + SVM rectificada':<25} {clasesC3[predictC4]:<20}")
-    print("-"*50)
-
-    # Tabla de comparación de accuracy por clasificador
-    print("\n" + "="*60)
-    print("COMPARACIÓN DE LOS MODELOS (ACCURACY)")
-    print("="*60)
-    print(f"{'Clasificador':<25} {'Entrada':<20} {'Accuracy':<10}")
-    print("-"*60)
-    print(f"{'C1 - SVM':<25} {'Imagen RGB':<20} {round(accuracyC1, 4):<10}")
-    print(f"{'C2 - LDA + SVM':<25} {'Imagen RGB':<20} {round(accuracy_score(yTest, svmC2.predict(ldaC2.transform(xTestN))), 4):<10}")
-    print(f"{'C3 - SVM':<25} {'Imagen rectificada':<20} {round(accuracy_score(yTestC3, svmC3.predict(xTestC3N)), 4):<10}")
-    print(f"{'C4 - LDA + SVM':<25} {'Imagen rectificada':<20} {round(accuracyC4, 4):<10}")
-    print("="*60)
-
-
+    # Mostrar resultados de clasificación
+    print()
+    print("CLASIFICACIÓN DE LA IMAGEN")
+    print("C1 - SVM sobre imagen RGB ->", clasesC1C2[predictC1])
+    print("C2 - LDA + SVM sobre imagen RGB ->", clasesC1C2[predictC2])
+    print("C3 - SVM sobre imagen rectificada ->", clasesC3C4[predictC3])
+    print("C4 - LDA + SVM sobre imagen rectificada ->", clasesC3C4[predictC4])
+    print()
