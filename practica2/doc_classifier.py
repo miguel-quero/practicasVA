@@ -99,36 +99,76 @@ def cargarImagenesRectificadas(ruta, rutaCoordenadas):
 #                                                                   Entrenamiento de modelos
 
 
-def entrenar_solo_svm(X_train, y_train, X_test, y_test):
-    pprint("Entrenando SVM sin reducción (C1)...")
-    svm = SVC(kernel='linear', random_state=42)
-    svm.fit(X_train, y_train)
-    y_pred = svm.predict(X_test)
-    acc = accuracy_score(y_test, y_pred)
-    print(f"Accuracy C1: {acc:.4f}")
+# Clasificador 1: SVM
+def EntrenamientoSVMC1(xTrain, yTrain, xTest, yTest):
+    print("Entrenamiento SVM (C1)")
+    # Crear clasificador SVM
+    svm =SVC(kernel='linear',random_state=42)
+
+    #Entrenamiento con las muestras de entrenamiento
+    svm.fit(xTrain,yTrain)
+
+    # Clasificación de las muestras de test
+    yPredict =svm.predict(xTest)
+
+    # Métrica de precision
+    accuracy =accuracy_score(yTest,yPredict)
+    print("Accuracy C1: "+str(round(accuracy,4)))
+
+    # Se devuelve el clasificador entrenado
     return svm
 
-def entrenar_lda_svm(X_train, y_train, X_test, y_test):
-    print("Entrenando LDA + SVM (C2)...")
-    n_clases = len(np.unique(y_train))
-    lda = LinearDiscriminantAnalysis(n_components=n_clases - 1)
-    X_train_lda = lda.fit_transform(X_train, y_train)
-    X_test_lda = lda.transform(X_test)
-    svm = SVC(kernel='linear', random_state=42)
-    svm.fit(X_train_lda, y_train)
-    y_pred = svm.predict(X_test_lda)
-    acc = accuracy_score(y_test, y_pred)
-    print(f"Accuracy C2: {acc:.4f}")
+# Clasificador 2: LDA + SVM
+def EntrenamientoLDASVMC2(xTrain, yTrain, xTest, yTest):
+    print("Entrenamiento LDA + SVM (C2)")
+
+    # Conseguir numero de clases para el LDA
+    numClases =len(np.unique(yTrain))
+
+    # Crear el LDA
+    lda= LinearDiscriminantAnalysis(n_components=numClases - 1)
+    # Aplicar el LDA a las muestras de entrenamiento y Test
+    xTrainLDA= lda.fit_transform(xTrain,yTrain)
+    xTestLDA = lda.transform(xTest)
+
+    # Crear clasificador SVM
+    svm = SVC(kernel='linear',random_state=42)
+
+    #Entrenamiento con las muestras de entrenamiento del LDA
+    svm.fit(xTrainLDA, yTrain)
+
+    # Clasificación de las muestras de test del LDA
+    yPredict = svm.predict(xTestLDA)
+
+    # Métrica de precision
+    accuracy = accuracy_score(yTest, yPredict)
+    print("Accuracy C2: "+ str(round(accuracy,4)))
+
+    # Se devuelven el SVM y el LDA ya entrenados
     return lda, svm
 
-def entrenar_svm(X_train, y_train, X_test, y_test):
-    pprint("Entrenando SVM sin reducción (C3)...")
-    svm = SVC(kernel='linear', random_state=42)
-    svm.fit(X_train, y_train)
-    y_pred = svm.predict(X_test)
-    acc = accuracy_score(y_test, y_pred)
-    print(f"Accuracy C3: {acc:.4f}")
+# Clasificador 3: SVM con imagenes rectificadas
+def EntrenamientoSVMC3(xTrain, yTrain,xTest,yTest):
+    print("Entrenamiento SVM con imagenes rectificadas (C3)")
+    # Crear clasificador SVM
+    svm =SVC(kernel='linear',random_state=42)
+
+    #Entrenamiento con las muestras de entrenamiento
+    svm.fit(xTrain,yTrain)
+
+    # Clasificación de las muestras de test
+    yPredict = svm.predict(xTest)
+
+    # Métrica de precision
+    accuracy =accuracy_score(yTest,yPredict)
+    print("Accuracy C3: "+ str(round(accuracy,4)))
+
+    # Se devuelve el clasificador SVM entrenado
     return svm
+
+
+# --------------------------------------------------------------------------------------------------------------------------------------------------------
+#                                                                   Funciones Auxiliares de preproceso, rectificación y lectura de coordenadas
 
 # Funcion para rectificar imagenes de nuestra practica 1
 def RectificarImagen(imagen, esquinas):
@@ -144,16 +184,32 @@ def RectificarImagen(imagen, esquinas):
     matrizPerspectiva = cv2.getPerspectiveTransform(srcImagen, dstImagen)
     return cv2.warpPerspective(imagen, matrizPerspectiva, (ancho, alto))
 
-def leer_esquinas(txt_path):
-    esquinas_dict = {}
-    with open(txt_path, 'r') as f:
+
+# Leer las esquinas de las coordenadas de cada imagen para guardarlas en el diccionario y así cargar las luego más facilmente 
+# Fuente de la funcion ast.literal_eval: https://docs.python.org/3/library/ast.html#ast.literal_eval
+def LeerEsquinas(ruta):
+
+    # Diccionario para guardar las esquinas
+    esquinas = {}
+
+    # Se abre el archivo para leer
+    with open(ruta, 'r') as f:
         for linea in f:
+            # Ignorar las lineas vacías
             if ':' not in linea:
                 continue
-            nombre, coords_str = linea.split(':', 1)
-            coords = ast.literal_eval(coords_str.strip())
-            esquinas_dict[nombre.strip()] = coords
-    return esquinas_dict
+            # separación del nombre de la imagen y sus coordenadas de esquina
+            nombre, coordenadas = linea.split(':', 1)
+
+            # Se utiliza para parsear las coordenadas de las esquinas
+            coords = ast.literal_eval(coordenadas.strip())
+
+            # Aqui se guardan las coordenadas en el diccionario
+            esquinas[nombre.strip()] = coords
+
+    # Se devuelve el diccionario de esquinas        
+    return esquinas
+
 
 def preprocesar_imagen_rgb(imagen_path, tamaño=(400, 300)):
     img = cv2.imread(imagen_path)
@@ -193,7 +249,8 @@ def preprocesar_imagen_rectificada_lda_c4(imagen_path, esquinas_dict, tamaño=(4
     vec_scaled = scaler_c3.transform(vec)
     return lda_c4.transform(vec_scaled)
 
-
+# --------------------------------------------------------------------------------------------------------------------------------------------------------
+#                                                                   Programa Principal
 if __name__ == "__main__":
     try:
         print("Ejecutando doc_classifier.py ...")
@@ -228,15 +285,15 @@ if __name__ == "__main__":
             X_test_scaled = scaler.transform(X_test)
             joblib.dump(scaler, "scaler.pkl")
 
-            svm_c1 = entrenar_solo_svm(X_train_scaled, y_train, X_test_scaled, y_test)
+            svm_c1 = EntrenamientoSVMC1(X_train_scaled, y_train, X_test_scaled, y_test)
             joblib.dump(svm_c1, "svm_c1.pkl")
 
-            lda_c2, svm_c2 = entrenar_lda_svm(X_train_scaled, y_train, X_test_scaled, y_test)
+            lda_c2, svm_c2 = EntrenamientoLDASVMC2(X_train_scaled, y_train, X_test_scaled, y_test)
             joblib.dump(lda_c2, "lda_c2.pkl")
             joblib.dump(svm_c2, "svm_c2.pkl")
 
             # Leer coordenadas de todas las imágenes (train y test)
-            esquinas_dict = leer_esquinas(txt_coordenadas)
+            esquinas_dict = LeerEsquinas(txt_coordenadas)
 
             # Cargar imágenes rectificadas para entrenamiento y test usando coordenadas
             X_train_c3, y_train_c3, clases_c3 = cargarImagenesRectificadas(ruta_train, esquinas_dict)
@@ -251,12 +308,12 @@ if __name__ == "__main__":
             X_test_c3_scaled = scaler_c3.transform(X_test_c3)
             joblib.dump(scaler_c3, "scaler_c3.pkl")
 
-            svm_c3 = entrenar_svm(X_train_c3_scaled, y_train_c3, X_test_c3_scaled, y_test_c3)
+            svm_c3 = EntrenamientoSVMC3(X_train_c3_scaled, y_train_c3, X_test_c3_scaled, y_test_c3)
             joblib.dump(svm_c3, "svm_c3.pkl")
             joblib.dump(clases_c3, "clases_c3.pkl")
 
-            # Utilizar funcion reducción dimensionalidad (entrenar_lda_svm) C2 + rectificadas C3
-            lda_c4, svm_c4 = entrenar_lda_svm(X_train_c3_scaled, y_train_c3, X_test_c3_scaled, y_test_c3)
+            # Utilizar funcion reducción dimensionalidad (EntrenamientoLDASVMC2) C2 + rectificadas C3
+            lda_c4, svm_c4 = EntrenamientoLDASVMC2(X_train_c3_scaled, y_train_c3, X_test_c3_scaled, y_test_c3)
             y_pred_c4 = svm_c4.predict(lda_c4.transform(X_test_c3_scaled))
             acc_c4 = accuracy_score(y_test_c3, y_pred_c4)
             print(f"Accuracy C4: {acc_c4:.4f}")
@@ -279,7 +336,7 @@ if __name__ == "__main__":
             svm_c3 = joblib.load("svm_c3.pkl")
             lda_c4 = joblib.load("lda_c4.pkl")
             svm_c4 = joblib.load("svm_c4.pkl")
-            esquinas_dict = leer_esquinas("coordenadasprac2.txt")
+            esquinas_dict = LeerEsquinas("coordenadasprac2.txt")
 
         vec = preprocesar_imagen_rgb(imagen_path)
         vec_lda = lda_c2.transform(vec)
