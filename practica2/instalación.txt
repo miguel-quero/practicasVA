@@ -1,0 +1,3 @@
+pip install joblib
+pip install scikit-learn
+python doc_classifier.py imagen.jpg
