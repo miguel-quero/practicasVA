@@ -116,7 +116,7 @@ def EntrenamientoSVMC1(xTrain, yTrain, xTest, yTest):
     print("Accuracy C1: "+str(round(accuracy,4)))
 
     # Se devuelve el clasificador entrenado
-    return svm
+    return svm, accuracy
 
 # Clasificador 2: LDA + SVM
 def EntrenamientoLDASVMC2(xTrain, yTrain, xTest, yTest):
@@ -331,9 +331,10 @@ if __name__ == "__main__":
             joblib.dump(scaler, "scaler.pkl")
 
             # Entrenamiento del clasificador C1: SVM sobre imágenes RGB
-            svm_c1 = EntrenamientoSVMC1(X_train_scaled, y_train, X_test_scaled, y_test)
+            svm_c1, acc_c1 = EntrenamientoSVMC1(X_train_scaled, y_train, X_test_scaled, y_test)
             joblib.dump(svm_c1, "svm_c1.pkl")
             joblib.dump(clases, "clases.pkl")
+
 
 
             # Entrenamiento del clasificador C2: LDA + SVM sobre imágenes RGB
@@ -391,6 +392,18 @@ if __name__ == "__main__":
             lda_c4 = joblib.load("lda_c4.pkl")
             svm_c4 = joblib.load("svm_c4.pkl")
             esquinas_dict = LeerEsquinas("coordenadasprac2.txt")
+            ruta_test = 'MUESTRA_PRACTICA2_2025/Test'
+            X_test, y_test, _ = cargarImagenes(ruta_test)
+            X_test_scaled = scaler.transform(X_test)
+
+            esquinas_dict = LeerEsquinas("coordenadasprac2.txt")
+            X_test_c3, y_test_c3, _ = cargarImagenesRectificadas(ruta_test, esquinas_dict)
+            X_test_c3_scaled = scaler_c3.transform(X_test_c3)
+            acc_c1 = accuracy_score(y_test, svm_c1.predict(X_test_scaled))
+            acc_c4 = accuracy_score(y_test_c3, svm_c4.predict(lda_c4.transform(X_test_c3_scaled)))
+
+            
+
 
         # Preprocesar la imagen pasada por argumento para cada uno de los clasificadores
         vec = preprocesar_imagen_rgb(imagen_path)
@@ -403,6 +416,10 @@ if __name__ == "__main__":
 
         vec_c4 = preprocesar_imagen_rectificada_lda_c4(imagen_path, esquinas_dict)
         pred_c4 = svm_c4.predict(vec_c4)[0]
+
+        acc_c2 = accuracy_score(y_test, svm_c2.predict(lda_c2.transform(X_test_scaled)))
+        acc_c3 = accuracy_score(y_test_c3, svm_c3.predict(X_test_c3_scaled))
+
 
         # Mostrar predicción de cada clasificador por pantalla
         print("\n" + "-"*50)
@@ -422,7 +439,7 @@ if __name__ == "__main__":
         print("="*60)
         print(f"{'Clasificador':<25} {'Entrada':<20} {'Accuracy':<10}")
         print("-"*60)
-        print(f"{'C1 - SVM':<25} {'Imagen RGB':<20} {round(accuracy, 4):<10}")
+        print(f"{'C1 - SVM':<25} {'Imagen RGB':<20} {round(acc_c1, 4):<10}")
         print(f"{'C2 - LDA + SVM':<25} {'Imagen RGB':<20} {round(accuracy_score(y_test, svm_c2.predict(lda_c2.transform(X_test_scaled))), 4):<10}")
         print(f"{'C3 - SVM':<25} {'Imagen rectificada':<20} {round(accuracy_score(y_test_c3, svm_c3.predict(X_test_c3_scaled)), 4):<10}")
         print(f"{'C4 - LDA + SVM':<25} {'Imagen rectificada':<20} {round(acc_c4, 4):<10}")
