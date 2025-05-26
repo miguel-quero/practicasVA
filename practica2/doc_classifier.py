@@ -287,78 +287,94 @@ def preprocesar_imagen_rectificada_lda_c4(imagen_path, esquinas_dict, tamaño=(4
 
 # --------------------------------------------------------------------------------------------------------------------------------------------------------
 #                                                                   Programa Principal
+# main
 if __name__ == "__main__":
     try:
         print("Ejecutando doc_classifier.py ...")
+
+        # Comprobar que se ha pasado correctamente el nombre de la imagen a clasificar como argumento
         if len(sys.argv) != 2:
             print("Uso incorrecto. Ejecuta como:\n   python doc_classifier.py imagen.jpg")
             sys.exit(1)
 
+        # Obtener la ruta de la imagen a clasificar
         imagen_path = sys.argv[1]
         if not os.path.exists(imagen_path):
             print(f"Imagen no encontrada: {imagen_path}")
             sys.exit(1)
 
+        # Comprobar si ya existen los modelos previamente entrenados
         modelos_existentes = all(os.path.exists(f) for f in [
             "svm_c1.pkl", "lda_c2.pkl", "svm_c2.pkl", "clases.pkl", "scaler.pkl",
             "svm_c3.pkl", "scaler_c3.pkl", "clases_c3.pkl", "coordenadasprac2.txt"
         ])
         print(f"Modelos existentes: {modelos_existentes}")
 
+        # Si no existen los modelos, se realiza el entrenamiento desde cero
         if not modelos_existentes:
             print("Modelos no encontrados, entrenando desde cero...")
 
+            # Rutas de las carpetas de entrenamiento y test, y del archivo de coordenadas
             ruta_train = 'MUESTRA_PRACTICA2_2025/Aprendizaje'
             ruta_test = 'MUESTRA_PRACTICA2_2025/Test'
             txt_coordenadas = 'coordenadasprac2.txt'
 
+            # Cargar imágenes RGB y etiquetas para entrenamiento y test (clasificadores C1 y C2)
             X_train, y_train, clases = cargarImagenes(ruta_train)
             X_test, y_test, _ = cargarImagenes(ruta_test)
 
+            # Normalizar vectores de características
             print("Normalizando características...")
             scaler = StandardScaler()
             X_train_scaled = scaler.fit_transform(X_train)
             X_test_scaled = scaler.transform(X_test)
             joblib.dump(scaler, "scaler.pkl")
 
+            # Entrenamiento del clasificador C1: SVM sobre imágenes RGB
             svm_c1 = EntrenamientoSVMC1(X_train_scaled, y_train, X_test_scaled, y_test)
             joblib.dump(svm_c1, "svm_c1.pkl")
 
+            # Entrenamiento del clasificador C2: LDA + SVM sobre imágenes RGB
             lda_c2, svm_c2 = EntrenamientoLDASVMC2(X_train_scaled, y_train, X_test_scaled, y_test)
             joblib.dump(lda_c2, "lda_c2.pkl")
             joblib.dump(svm_c2, "svm_c2.pkl")
 
-            # Leer coordenadas de todas las imágenes (train y test)
+            # Leer coordenadas de las esquinas de todas las imágenes desde archivo
             esquinas_dict = LeerEsquinas(txt_coordenadas)
 
-            # Cargar imágenes rectificadas para entrenamiento y test usando coordenadas
+            # Cargar imágenes rectificadas para entrenamiento y test (clasificadores C3 y C4)
             X_train_c3, y_train_c3, clases_c3 = cargarImagenesRectificadas(ruta_train, esquinas_dict)
             X_test_c3, y_test_c3, _ = cargarImagenesRectificadas(ruta_test, esquinas_dict)
 
+            # Verificar que haya datos suficientes para entrenar con imágenes rectificadas
             if X_train_c3.size == 0 or X_test_c3.size == 0:
                 raise ValueError("No hay datos para entrenar o evaluar el clasificador C3 con imágenes rectificadas.")
 
+            # Normalizar vectores de características de imágenes rectificadas
             print("Normalizando características rectificadas...")
             scaler_c3 = StandardScaler()
             X_train_c3_scaled = scaler_c3.fit_transform(X_train_c3)
             X_test_c3_scaled = scaler_c3.transform(X_test_c3)
             joblib.dump(scaler_c3, "scaler_c3.pkl")
 
+            # Entrenamiento del clasificador C3: SVM sobre imágenes rectificadas
             svm_c3 = EntrenamientoSVMC3(X_train_c3_scaled, y_train_c3, X_test_c3_scaled, y_test_c3)
             joblib.dump(svm_c3, "svm_c3.pkl")
             joblib.dump(clases_c3, "clases_c3.pkl")
 
-            # Utilizar funcion reducción dimensionalidad (EntrenamientoLDASVMC2) C2 + rectificadas C3
+            # Entrenamiento del clasificador C4: LDA + SVM sobre imágenes rectificadas
             lda_c4, svm_c4 = EntrenamientoLDASVMC2(X_train_c3_scaled, y_train_c3, X_test_c3_scaled, y_test_c3)
             y_pred_c4 = svm_c4.predict(lda_c4.transform(X_test_c3_scaled))
             acc_c4 = accuracy_score(y_test_c3, y_pred_c4)
             print(f"Accuracy C4: {acc_c4:.4f}")
 
+            # Guardar los modelos entrenados
             joblib.dump(lda_c4, "lda_c4.pkl")
             joblib.dump(svm_c4, "svm_c4.pkl")
 
             print("Modelos y etiquetas guardados correctamente.")
 
+        # Si ya existen los modelos, simplemente se cargan desde los archivos .pkl
         else:
             print("Modelos encontrados, cargándolos...")
             clases = joblib.load("clases.pkl")
@@ -374,6 +390,7 @@ if __name__ == "__main__":
             svm_c4 = joblib.load("svm_c4.pkl")
             esquinas_dict = LeerEsquinas("coordenadasprac2.txt")
 
+        # Preprocesar la imagen pasada por argumento para cada uno de los clasificadores
         vec = preprocesar_imagen_rgb(imagen_path)
         vec_lda = lda_c2.transform(vec)
         pred_c2 = svm_c2.predict(vec_lda)[0]
@@ -385,10 +402,12 @@ if __name__ == "__main__":
         vec_c4 = preprocesar_imagen_rectificada_lda_c4(imagen_path, esquinas_dict)
         pred_c4 = svm_c4.predict(vec_c4)[0]
 
+        # Mostrar predicción de cada clasificador por pantalla
         print(f"\nClasificador C1 predice: {clases[pred_c1]}")
         print(f"Clasificador C2 predice: {clases[pred_c2]}")
         print(f"Clasificador C3 predice: {clases_c3[pred_c3]}")
         print(f"Clasificador C4 predice: {clases_c3[pred_c4]}")
 
+    # Capturar errores inesperados y mostrarlos por pantalla
     except Exception as e:
         print(f"Error inesperado: {e}")
