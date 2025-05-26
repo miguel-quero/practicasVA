@@ -5,14 +5,14 @@ import os # Libreria para cargar las imagenes
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
-from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay, classification_report
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay, classification_report # libreria para mostrar las matrices de confusió y las tablas de metricas
 
 import joblib # La utilizamos para guardar los modelos creados de la practica.
 from sklearn.preprocessing import StandardScaler
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.svm import SVC
 from sklearn.metrics import accuracy_score
-from pprint import pprint
+
 import ast  # Para parsear coordenadas desde txt
 
 
@@ -146,8 +146,8 @@ def EntrenamientoSVMC3(xTrain, yTrain, xTest, yTest):
 
 
 
-# --------------------------------------------------------------------------------------------------------------------------------------------------------
-#                                                                   Funciones Auxiliares de preproceso, rectificación y lectura de coordenadas
+# ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#                                             Funciones Auxiliares de preproceso, rectificación, lectura de coordenadas y de mostrar la matriz de confusión
 
 # Funcion para rectificar imagenes de nuestra practica 1
 def RectificarImagen(imagen, esquinas):
@@ -263,6 +263,25 @@ def PreprocesarImagenRectificadaLDAC4(rutaImagen, esquinas):
     return ldaC4.transform(vectorC3)
 
 
+# Función que muestra la matriz de confusión
+#Fuente que hemos utilizado: https://scikit-learn.org/stable/modules/generated/sklearn.metrics.ConfusionMatrixDisplay.html
+def MostrarMatrizConfusion ( yReal,yPred, clases,titulo,archivo):
+    # Crea la matriz segun los datos reales y estimados
+    matriz = confusion_matrix(yReal, yPred)
+    # Se crea el gráfico de la matriz
+    display = ConfusionMatrixDisplay(confusion_matrix=matriz, display_labels=clases)
+
+    display.plot(cmap= plt.cm.Blues)
+    # Se añade el titulo de la matriz
+    plt.title(titulo)
+
+    # Se guarda la imagen de la matriz en png
+    plt.savefig( archivo)
+    # Se muestra todo
+    plt.show()
+
+    
+    
 
    
 
@@ -300,7 +319,8 @@ if __name__ == "__main__":
 
     # Leer esquinas para rectificación
     esquinas = LeerEsquinas(coordenadasTXT)
-        
+    
+
     if not modelos:
         # Si no existen modelos, entrenar y guardar todos los modelos
 
@@ -356,6 +376,30 @@ if __name__ == "__main__":
         joblib.dump(ldaC4, "ldaC4.pkl")
         joblib.dump(svmC4, "svmC4.pkl")
 
+
+        # Mostrar métricas y matrices sólo cuando se entrena por primera vez los clasificadores
+        # Hemos utilizado classification_report para mostrar las métricas de cada clasificador típicas (precision, recall, f1 score, etc)
+        # Fuente de la función que hemos utilizado: https://scikit-learn.org/stable/modules/generated/sklearn.metrics.classification_report.html
+        yPredC1 =svmC1.predict(xTestN)
+        print("Tabla C1: \n", classification_report(yTest,yPredC1, target_names= clasesC1C2))
+
+        MostrarMatrizConfusion(yTest, yPredC1, clasesC1C2,"Matriz Confusión Clasificador C1", "matrizC1.png")
+
+        yPredC2= svmC2.predict(ldaC2.transform(xTestN))
+
+        print("Tabla C2:\n", classification_report(yTest, yPredC2, target_names=clasesC1C2))
+        MostrarMatrizConfusion(yTest, yPredC2, clasesC1C2,"Matriz Confusión Clasificador C2", "matrizC2.png")
+
+        yPredC3 = svmC3.predict(xTestC3N)
+        print("Tabla C3:\n", classification_report(yTestC3, yPredC3, target_names=clasesC3C4))
+        MostrarMatrizConfusion(yTestC3,yPredC3, clasesC3C4, "Matriz Confusión Clasificador C3", "matrizC3.png")
+
+        yPredC4= svmC4.predict(ldaC4.transform(xTestC3N))
+        print("Tabla C4: \n", classification_report(yTestC3, yPredC4, target_names=clasesC3C4))
+
+        MostrarMatrizConfusion(yTestC3, yPredC4,clasesC3C4, "Matriz Confusión Clasificador C4", "matrizC4.png")
+
+
     else:
         # Cargar modelos ya entrenados y archivos necesarios
 
@@ -372,6 +416,7 @@ if __name__ == "__main__":
         svmC3 = joblib.load("svmC3.pkl")
         ldaC4 = joblib.load("ldaC4.pkl")
         svmC4 = joblib.load("svmC4.pkl")
+
 
     # Vector RGB para SVM C1 y predicción del clasificador 1
     vector = PreprocesarImagenRGB(rutaImagen)
@@ -391,7 +436,7 @@ if __name__ == "__main__":
     vectorLDAC4 = PreprocesarImagenRectificadaLDAC4(rutaImagen, esquinas)
     predictC4 = svmC4.predict(vectorLDAC4)[0]
 
-    # Mostrar resultados de clasificación
+    # Mostrar siempre los resultados de clasificación de la imagen
     print()
     print("CLASIFICACIÓN DE LA IMAGEN")
     print("C1 - SVM sobre imagen RGB ->", clasesC1C2[predictC1])
@@ -399,3 +444,7 @@ if __name__ == "__main__":
     print("C3 - SVM sobre imagen rectificada ->", clasesC3C4[predictC3])
     print("C4 - LDA + SVM sobre imagen rectificada ->", clasesC3C4[predictC4])
     print()
+
+
+
+   
