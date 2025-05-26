@@ -4,7 +4,8 @@ import sys
 import os # Libreria para cargar las imagenes
 import cv2
 import numpy as np
-import joblib
+
+import joblib # La utilizamos para guardar los modelos creados de la practica.
 from sklearn.preprocessing import StandardScaler
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.svm import SVC
@@ -212,82 +213,86 @@ def LeerEsquinas(ruta):
 
 
 # Preprocesa una imagen RGB para los clasificadores C1 y C2.
-# Aplica conversión a RGB, redimensionamiento, aplanado (flatten) y normalización con el scaler correspondiente.
-def preprocesar_imagen_rgb(imagen_path, tamaño=(400, 300)):
-    img = cv2.imread(imagen_path)
-    if img is None:
-        raise ValueError(f"No se pudo cargar la imagen: {imagen_path}")
+# Aplica conversión a RGB, redimensionamiento, aplanado (flatten) y normalizacion con el scaler correspondiente.
+def preprocesar_imagen_rgb (rutaImagen):
+    tamaño=(400,300)
+    img= cv2.imread(rutaImagen)
 
     # Convertimos de BGR (formato por defecto de OpenCV) a RGB
-    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    img =cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
-    # Redimensionamos la imagen al tamaño deseado
-    img = cv2.resize(img, tamaño)
+    # Redimensionamos la imagen al tamaño
+    img = cv2.resize(img,tamaño)
 
-    # Aplanamos la imagen y convertimos a tipo float32
-    vec = img.flatten().astype(np.float32).reshape(1, -1)
+    # Aplanamos la imagen (vector de dimension 1) y convertimos a tipo float32
+    vector =img.flatten().astype(np.float32).reshape(1, -1)
 
     # Cargamos el scaler ya entrenado para normalizar los vectores
-    scaler = joblib.load("scaler.pkl")
-    return scaler.transform(vec)
+    scaler =joblib.load("scaler.pkl")
+
+    # Se devuelve el vector ya normalizado directamente
+    return scaler.transform(vector)
 
 
 
 # Preprocesa una imagen rectificada para el clasificador C3.
-# Aplica la rectificación usando la función RectificarImagen, luego resize, flatten y normalización con scaler_c3.
-def preprocesar_imagen_c3(imagen_path, esquinas_dict, tamaño=(400, 300)):
-    img = cv2.imread(imagen_path)
-    if img is None:
-        raise ValueError(f"No se pudo cargar la imagen: {imagen_path}")
-    
+# Aplica la rectificación usando la función RectificarImagen, luego resize, flatten y normalización con el scaler (normalizador) del clasificador 3.
+def preprocesar_imagen_c3(rutaImagen, esquinas):
+    tamaño=(400, 300)
+    img =cv2.imread(rutaImagen)
+
     # Obtener el nombre del archivo para buscar sus esquinas
-    base_name = os.path.basename(imagen_path)
-    if base_name not in esquinas_dict:
-        raise ValueError(f"Coordenadas no encontradas para {base_name}")
+    nombreImagen = os.path.basename(rutaImagen)
 
     # Rectificar la imagen con las esquinas usando la función definida anteriormente
-    img_rect = RectificarImagen(img, esquinas_dict[base_name])
+    img= RectificarImagen(img, esquinas[nombreImagen])
 
-    # Redimensionar y convertir a vector
-    img_resized = cv2.resize(img_rect, tamaño)
-    vec = img_resized.flatten().astype(np.float32).reshape(1, -1)
+    # Redimensionar y convertir a vector de 1 dimensión
+    img = cv2.resize(img, tamaño)
+    vector =img.flatten().astype(np.float32).reshape(1, -1)
 
     # Normalizar con el scaler correspondiente al clasificador C3
     scaler_c3 = joblib.load("scaler_c3.pkl")
-    return scaler_c3.transform(vec)
+
+    # Se devuelve el vector ya normalizado directamente
+    return scaler_c3.transform(vector)
 
 
 # Preprocesa una imagen rectificada para el clasificador C4 (LDA + SVM sobre imágenes rectificadas).
-# Aplica la rectificación con RectificarImagen, luego resize, flatten, normalización con scaler_c3 y proyección con lda_c4.
-def preprocesar_imagen_rectificada_lda_c4(imagen_path, esquinas_dict, tamaño=(400, 300)):
-    img = cv2.imread(imagen_path)
-    if img is None:
-        raise ValueError(f"No se pudo cargar la imagen: {imagen_path}")
+# Aplica la rectificación con RectificarImagen, luego resize, flatten, normalización con scaler_c3 y transformación de las muestras con lda_c4.
+def preprocesar_imagen_rectificada_lda_c4(rutaImagen, esquinas):
+    tamaño=(400, 300)
+    img = cv2.imread(rutaImagen)
 
-    # Obtener el nombre del archivo para recuperar sus coordenadas
-    base_name = os.path.basename(imagen_path)
-    if base_name not in esquinas_dict:
-        raise ValueError(f"Coordenadas no encontradas para {base_name}")
+    # Obtener el nombre del archivo (imagen) para recuperar sus coordenadas
+    nombreImagen =os.path.basename(rutaImagen)
 
-    # Rectificar la imagen aplicando la transformación de perspectiva
-    img_rect = RectificarImagen(img, esquinas_dict[base_name])
+    # Rectificar la imagen aplicando la transformacion de perspectiva
+    img= RectificarImagen(img, esquinas[nombreImagen])
 
     # Redimensionar y aplanar la imagen
-    img_resized = cv2.resize(img_rect, tamaño)
-    vec = img_resized.flatten().astype(np.float32).reshape(1, -1)
+    img = cv2.resize(img,tamaño)
+    vector = img.flatten().astype(np.float32).reshape(1,-1)
 
     # Normalizar con el scaler de C3
-    scaler_c3 = joblib.load("scaler_c3.pkl")
-    vec_scaled = scaler_c3.transform(vec)
+    scaler_c3 =joblib.load("scaler_c3.pkl")
+    vectorC3 = scaler_c3.transform(vector)
 
     # Aplicar reducción de dimensionalidad con LDA entrenado
-    lda_c4 = joblib.load("lda_c4.pkl")
-    return lda_c4.transform(vec_scaled)
+    lda_c4= joblib.load("lda_c4.pkl")
+
+    # Se devuelve el vector con la transformacion del LDA
+    return lda_c4.transform(vectorC3)
 
 
 # --------------------------------------------------------------------------------------------------------------------------------------------------------
 #                                                                   Programa Principal
 # main
+# Fuente de la libreria joblib (para el guardado de modelos): https://scikit-learn.org/stable/model_persistence.html
+# Fuentes del normalizador de características que hemos utilizado para mejorar el SVM y el LDA
+# https://scikit-learn.org/stable/modules/preprocessing.html#standardization-or-mean-removal-and-variance-scaling
+# https://stackoverflow.com/questions/14688391/how-to-apply-standardization-to-svms-in-scikit-learn
+# Hemos utilizado StandardScaler porque normaliza los datos a la distribución normal estándar N(0,1) para mejorar las metricas de los clasificadores.
 if __name__ == "__main__":
     try:
         print("Ejecutando doc_classifier.py ...")
@@ -298,9 +303,9 @@ if __name__ == "__main__":
             sys.exit(1)
 
         # Obtener la ruta de la imagen a clasificar
-        imagen_path = sys.argv[1]
-        if not os.path.exists(imagen_path):
-            print(f"Imagen no encontrada: {imagen_path}")
+        rutaImagen = sys.argv[1]
+        if not os.path.exists(rutaImagen):
+            print(f"Imagen no encontrada: {rutaImagen}")
             sys.exit(1)
 
         # Comprobar si ya existen los modelos previamente entrenados
@@ -343,11 +348,11 @@ if __name__ == "__main__":
             joblib.dump(svm_c2, "svm_c2.pkl")
 
             # Leer coordenadas de las esquinas de todas las imágenes desde archivo
-            esquinas_dict = LeerEsquinas(txt_coordenadas)
+            esquinas = LeerEsquinas(txt_coordenadas)
 
             # Cargar imágenes rectificadas para entrenamiento y test (clasificadores C3 y C4)
-            X_train_c3, y_train_c3, clases_c3 = cargarImagenesRectificadas(ruta_train, esquinas_dict)
-            X_test_c3, y_test_c3, _ = cargarImagenesRectificadas(ruta_test, esquinas_dict)
+            X_train_c3, y_train_c3, clases_c3 = cargarImagenesRectificadas(ruta_train, esquinas)
+            X_test_c3, y_test_c3, _ = cargarImagenesRectificadas(ruta_test, esquinas)
 
             # Verificar que haya datos suficientes para entrenar con imágenes rectificadas
             if X_train_c3.size == 0 or X_test_c3.size == 0:
@@ -391,13 +396,13 @@ if __name__ == "__main__":
             svm_c3 = joblib.load("svm_c3.pkl")
             lda_c4 = joblib.load("lda_c4.pkl")
             svm_c4 = joblib.load("svm_c4.pkl")
-            esquinas_dict = LeerEsquinas("coordenadasprac2.txt")
+            esquinas = LeerEsquinas("coordenadasprac2.txt")
             ruta_test = 'MUESTRA_PRACTICA2_2025/Test'
             X_test, y_test, _ = cargarImagenes(ruta_test)
             X_test_scaled = scaler.transform(X_test)
 
-            esquinas_dict = LeerEsquinas("coordenadasprac2.txt")
-            X_test_c3, y_test_c3, _ = cargarImagenesRectificadas(ruta_test, esquinas_dict)
+            esquinas = LeerEsquinas("coordenadasprac2.txt")
+            X_test_c3, y_test_c3, _ = cargarImagenesRectificadas(ruta_test, esquinas)
             X_test_c3_scaled = scaler_c3.transform(X_test_c3)
             acc_c1 = accuracy_score(y_test, svm_c1.predict(X_test_scaled))
             acc_c4 = accuracy_score(y_test_c3, svm_c4.predict(lda_c4.transform(X_test_c3_scaled)))
@@ -406,15 +411,15 @@ if __name__ == "__main__":
 
 
         # Preprocesar la imagen pasada por argumento para cada uno de los clasificadores
-        vec = preprocesar_imagen_rgb(imagen_path)
-        vec_lda = lda_c2.transform(vec)
+        vector = preprocesar_imagen_rgb(rutaImagen)
+        vec_lda = lda_c2.transform(vector)
         pred_c2 = svm_c2.predict(vec_lda)[0]
-        pred_c1 = svm_c1.predict(vec)[0]
+        pred_c1 = svm_c1.predict(vector)[0]
 
-        vec_c3 = preprocesar_imagen_c3(imagen_path, esquinas_dict)
+        vec_c3 = preprocesar_imagen_c3(rutaImagen, esquinas)
         pred_c3 = svm_c3.predict(vec_c3)[0]
 
-        vec_c4 = preprocesar_imagen_rectificada_lda_c4(imagen_path, esquinas_dict)
+        vec_c4 = preprocesar_imagen_rectificada_lda_c4(rutaImagen, esquinas)
         pred_c4 = svm_c4.predict(vec_c4)[0]
 
         acc_c2 = accuracy_score(y_test, svm_c2.predict(lda_c2.transform(X_test_scaled)))
