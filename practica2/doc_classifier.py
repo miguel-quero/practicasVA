@@ -333,6 +333,8 @@ if __name__ == "__main__":
             # Entrenamiento del clasificador C1: SVM sobre imágenes RGB
             svm_c1 = EntrenamientoSVMC1(X_train_scaled, y_train, X_test_scaled, y_test)
             joblib.dump(svm_c1, "svm_c1.pkl")
+            joblib.dump(clases, "clases.pkl")
+
 
             # Entrenamiento del clasificador C2: LDA + SVM sobre imágenes RGB
             lda_c2, svm_c2 = EntrenamientoLDASVMC2(X_train_scaled, y_train, X_test_scaled, y_test)
@@ -403,10 +405,30 @@ if __name__ == "__main__":
         pred_c4 = svm_c4.predict(vec_c4)[0]
 
         # Mostrar predicción de cada clasificador por pantalla
-        print(f"\nClasificador C1 predice: {clases[pred_c1]}")
-        print(f"Clasificador C2 predice: {clases[pred_c2]}")
-        print(f"Clasificador C3 predice: {clases_c3[pred_c3]}")
-        print(f"Clasificador C4 predice: {clases_c3[pred_c4]}")
+        print("\n" + "-"*50)
+        print("RESULTADO DE CLASIFICACIÓN")
+        print("-"*50)
+        print(f"{'Clasificador':<25} {'Predicción':<20}")
+        print("-"*50)
+        print(f"{'C1 - SVM sobre RGB':<25} {clases[pred_c1]:<20}")
+        print(f"{'C2 - LDA + SVM sobre RGB':<25} {clases[pred_c2]:<20}")
+        print(f"{'C3 - SVM sobre rectificada':<25} {clases_c3[pred_c3]:<20}")
+        print(f"{'C4 - LDA + SVM rectificada':<25} {clases_c3[pred_c4]:<20}")
+        print("-"*50)
+
+        # Tabla de comparación de accuracy por clasificador
+        print("\n" + "="*60)
+        print("COMPARACIÓN DE LOS MODELOS (ACCURACY)")
+        print("="*60)
+        print(f"{'Clasificador':<25} {'Entrada':<20} {'Accuracy':<10}")
+        print("-"*60)
+        print(f"{'C1 - SVM':<25} {'Imagen RGB':<20} {round(accuracy, 4):<10}")
+        print(f"{'C2 - LDA + SVM':<25} {'Imagen RGB':<20} {round(accuracy_score(y_test, svm_c2.predict(lda_c2.transform(X_test_scaled))), 4):<10}")
+        print(f"{'C3 - SVM':<25} {'Imagen rectificada':<20} {round(accuracy_score(y_test_c3, svm_c3.predict(X_test_c3_scaled)), 4):<10}")
+        print(f"{'C4 - LDA + SVM':<25} {'Imagen rectificada':<20} {round(acc_c4, 4):<10}")
+        print("="*60)
+
+
 
     # Capturar errores inesperados y mostrarlos por pantalla
     except Exception as e:
