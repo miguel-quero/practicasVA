@@ -211,43 +211,79 @@ def LeerEsquinas(ruta):
     return esquinas
 
 
+# Preprocesa una imagen RGB para los clasificadores C1 y C2.
+# Aplica conversión a RGB, redimensionamiento, aplanado (flatten) y normalización con el scaler correspondiente.
 def preprocesar_imagen_rgb(imagen_path, tamaño=(400, 300)):
     img = cv2.imread(imagen_path)
     if img is None:
         raise ValueError(f"No se pudo cargar la imagen: {imagen_path}")
+
+    # Convertimos de BGR (formato por defecto de OpenCV) a RGB
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+    # Redimensionamos la imagen al tamaño deseado
     img = cv2.resize(img, tamaño)
+
+    # Aplanamos la imagen y convertimos a tipo float32
     vec = img.flatten().astype(np.float32).reshape(1, -1)
+
+    # Cargamos el scaler ya entrenado para normalizar los vectores
     scaler = joblib.load("scaler.pkl")
     return scaler.transform(vec)
 
+
+
+# Preprocesa una imagen rectificada para el clasificador C3.
+# Aplica la rectificación usando la función RectificarImagen, luego resize, flatten y normalización con scaler_c3.
 def preprocesar_imagen_c3(imagen_path, esquinas_dict, tamaño=(400, 300)):
     img = cv2.imread(imagen_path)
     if img is None:
         raise ValueError(f"No se pudo cargar la imagen: {imagen_path}")
+    
+    # Obtener el nombre del archivo para buscar sus esquinas
     base_name = os.path.basename(imagen_path)
     if base_name not in esquinas_dict:
         raise ValueError(f"Coordenadas no encontradas para {base_name}")
+
+    # Rectificar la imagen con las esquinas usando la función definida anteriormente
     img_rect = RectificarImagen(img, esquinas_dict[base_name])
+
+    # Redimensionar y convertir a vector
     img_resized = cv2.resize(img_rect, tamaño)
     vec = img_resized.flatten().astype(np.float32).reshape(1, -1)
+
+    # Normalizar con el scaler correspondiente al clasificador C3
     scaler_c3 = joblib.load("scaler_c3.pkl")
     return scaler_c3.transform(vec)
 
+
+# Preprocesa una imagen rectificada para el clasificador C4 (LDA + SVM sobre imágenes rectificadas).
+# Aplica la rectificación con RectificarImagen, luego resize, flatten, normalización con scaler_c3 y proyección con lda_c4.
 def preprocesar_imagen_rectificada_lda_c4(imagen_path, esquinas_dict, tamaño=(400, 300)):
     img = cv2.imread(imagen_path)
     if img is None:
         raise ValueError(f"No se pudo cargar la imagen: {imagen_path}")
+
+    # Obtener el nombre del archivo para recuperar sus coordenadas
     base_name = os.path.basename(imagen_path)
     if base_name not in esquinas_dict:
         raise ValueError(f"Coordenadas no encontradas para {base_name}")
+
+    # Rectificar la imagen aplicando la transformación de perspectiva
     img_rect = RectificarImagen(img, esquinas_dict[base_name])
+
+    # Redimensionar y aplanar la imagen
     img_resized = cv2.resize(img_rect, tamaño)
     vec = img_resized.flatten().astype(np.float32).reshape(1, -1)
+
+    # Normalizar con el scaler de C3
     scaler_c3 = joblib.load("scaler_c3.pkl")
-    lda_c4 = joblib.load("lda_c4.pkl")
     vec_scaled = scaler_c3.transform(vec)
+
+    # Aplicar reducción de dimensionalidad con LDA entrenado
+    lda_c4 = joblib.load("lda_c4.pkl")
     return lda_c4.transform(vec_scaled)
+
 
 # --------------------------------------------------------------------------------------------------------------------------------------------------------
 #                                                                   Programa Principal
