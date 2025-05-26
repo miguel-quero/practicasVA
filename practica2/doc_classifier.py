@@ -214,7 +214,7 @@ def LeerEsquinas(ruta):
 
 # Preprocesa una imagen RGB para los clasificadores C1 y C2.
 # Aplica conversión a RGB, redimensionamiento, aplanado (flatten) y normalizacion con el scaler correspondiente.
-def preprocesar_imagen_rgb (rutaImagen):
+def PreprocesarImagenRGB (rutaImagen):
     tamaño=(400,300)
     img= cv2.imread(rutaImagen)
 
@@ -237,7 +237,7 @@ def preprocesar_imagen_rgb (rutaImagen):
 
 # Preprocesa una imagen rectificada para el clasificador C3.
 # Aplica la rectificación usando la función RectificarImagen, luego resize, flatten y normalización con el scaler (normalizador) del clasificador 3.
-def preprocesar_imagen_c3(rutaImagen, esquinas):
+def PreprocesarImagenC3(rutaImagen, esquinas):
     tamaño=(400, 300)
     img =cv2.imread(rutaImagen)
 
@@ -252,15 +252,15 @@ def preprocesar_imagen_c3(rutaImagen, esquinas):
     vector =img.flatten().astype(np.float32).reshape(1, -1)
 
     # Normalizar con el scaler correspondiente al clasificador C3
-    scaler_c3 = joblib.load("scaler_c3.pkl")
+    scalerC3 = joblib.load("scalerC3.pkl")
 
     # Se devuelve el vector ya normalizado directamente
-    return scaler_c3.transform(vector)
+    return scalerC3.transform(vector)
 
 
 # Preprocesa una imagen rectificada para el clasificador C4 (LDA + SVM sobre imágenes rectificadas).
-# Aplica la rectificación con RectificarImagen, luego resize, flatten, normalización con scaler_c3 y transformación de las muestras con lda_c4.
-def preprocesar_imagen_rectificada_lda_c4(rutaImagen, esquinas):
+# Aplica la rectificación con RectificarImagen, luego resize, flatten, normalización con scalerC3 y transformación de las muestras con ldaC4.
+def PreprocesarImagenRectificadaLDAC4(rutaImagen, esquinas):
     tamaño=(400, 300)
     img = cv2.imread(rutaImagen)
 
@@ -275,14 +275,14 @@ def preprocesar_imagen_rectificada_lda_c4(rutaImagen, esquinas):
     vector = img.flatten().astype(np.float32).reshape(1,-1)
 
     # Normalizar con el scaler de C3
-    scaler_c3 =joblib.load("scaler_c3.pkl")
-    vectorC3 = scaler_c3.transform(vector)
+    scalerC3 =joblib.load("scalerC3.pkl")
+    vectorC3 = scalerC3.transform(vector)
 
     # Aplicar reducción de dimensionalidad con LDA entrenado
-    lda_c4= joblib.load("lda_c4.pkl")
+    ldaC4= joblib.load("ldaC4.pkl")
 
     # Se devuelve el vector con la transformacion del LDA
-    return lda_c4.transform(vectorC3)
+    return ldaC4.transform(vectorC3)
 
 
 # --------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -293,165 +293,153 @@ def preprocesar_imagen_rectificada_lda_c4(rutaImagen, esquinas):
 # https://scikit-learn.org/stable/modules/preprocessing.html#standardization-or-mean-removal-and-variance-scaling
 # https://stackoverflow.com/questions/14688391/how-to-apply-standardization-to-svms-in-scikit-learn
 # Hemos utilizado StandardScaler porque normaliza los datos a la distribución normal estándar N(0,1) para mejorar las metricas de los clasificadores.
+
 if __name__ == "__main__":
-    try:
-        print("Ejecutando doc_classifier.py ...")
 
-        # Comprobar que se ha pasado correctamente el nombre de la imagen a clasificar como argumento
-        if len(sys.argv) != 2:
-            print("Uso incorrecto. Ejecuta como:\n   python doc_classifier.py imagen.jpg")
-            sys.exit(1)
+    # Comprobar que se ha pasado correctamente el nombre de la imagen a clasificar como argumento
+    if len(sys.argv) != 2:
+        print("Error. Ejemplo: python doc_classifier.py imagen.jpg")
+        exit()
 
-        # Obtener la ruta de la imagen a clasificar
-        rutaImagen = sys.argv[1]
-        if not os.path.exists(rutaImagen):
-            print(f"Imagen no encontrada: {rutaImagen}")
-            sys.exit(1)
+    # Obtener la ruta de la imagen a clasificar
+    rutaImagen = sys.argv[1]
+    if not os.path.exists(rutaImagen):
+        print("Imagen no encontrada: ", rutaImagen)
+        exit()
 
-        # Comprobar si ya existen los modelos previamente entrenados
-        modelos_existentes = all(os.path.exists(f) for f in [
-            "svm_c1.pkl", "lda_c2.pkl", "svm_c2.pkl", "clases.pkl", "scaler.pkl",
-            "svm_c3.pkl", "scaler_c3.pkl", "clases_c3.pkl", "coordenadasprac2.txt"
-        ])
-        print(f"Modelos existentes: {modelos_existentes}")
+    # Comprobar si ya existen los modelos previamente entrenados
+    modelos = all(os.path.exists(modelo) for modelo in ["svmC1.pkl","ldaC2.pkl","svmC2.pkl", "clases.pkl", "scaler.pkl","svmC3.pkl","scalerC3.pkl", "clasesC3.pkl","coordenadasprac2.txt"])
+    print("Modelos existentes: ", modelos)
 
-        # Si no existen los modelos, se realiza el entrenamiento desde cero
-        if not modelos_existentes:
-            print("Modelos no encontrados, entrenando desde cero...")
+    # Si no existen los modelos, se realiza el entrenamiento desde cero
+    if not modelos:
+        print("No se han encontrado modelos, creando modelos")
 
-            # Rutas de las carpetas de entrenamiento y test, y del archivo de coordenadas
-            ruta_train = 'MUESTRA_PRACTICA2_2025/Aprendizaje'
-            ruta_test = 'MUESTRA_PRACTICA2_2025/Test'
-            txt_coordenadas = 'coordenadasprac2.txt'
+        # Rutas de las carpetas de entrenamiento y test, y del archivo de coordenadas
+        rutaTrain = 'MUESTRA_PRACTICA2_2025/Aprendizaje'
+        rutaTest = 'MUESTRA_PRACTICA2_2025/Test'
+        coordenadasTXT = 'coordenadasprac2.txt'
 
-            # Cargar imágenes RGB y etiquetas para entrenamiento y test (clasificadores C1 y C2)
-            X_train, y_train, clases = cargarImagenes(ruta_train)
-            X_test, y_test, _ = cargarImagenes(ruta_test)
+        # Cargar imágenes RGB y etiquetas para entrenamiento y test (clasificadores C1 y C2)
+        xTrain, yTrain, clases = cargarImagenes(rutaTrain)
+        xTest, yTest, _ = cargarImagenes(rutaTest)
 
-            # Normalizar vectores de características
-            print("Normalizando características...")
-            scaler = StandardScaler()
-            X_train_scaled = scaler.fit_transform(X_train)
-            X_test_scaled = scaler.transform(X_test)
-            joblib.dump(scaler, "scaler.pkl")
+        # Normalizar vectores de características
+        print("Normalizando características con StandardScaler para mejorar la precisión")
+        scaler = StandardScaler()
+        xTrainN = scaler.fit_transform(xTrain)
+        xTestN = scaler.transform(xTest)
+        joblib.dump(scaler, "scaler.pkl")
 
-            # Entrenamiento del clasificador C1: SVM sobre imágenes RGB
-            svm_c1, acc_c1 = EntrenamientoSVMC1(X_train_scaled, y_train, X_test_scaled, y_test)
-            joblib.dump(svm_c1, "svm_c1.pkl")
-            joblib.dump(clases, "clases.pkl")
+        # Entrenamiento del clasificador C1: SVM sobre imágenes RGB
+        svmC1, accuracyC1 = EntrenamientoSVMC1(xTrainN, yTrain, xTestN, yTest)
+        joblib.dump(svmC1, "svmC1.pkl")
+        joblib.dump(clases, "clases.pkl")
 
 
 
-            # Entrenamiento del clasificador C2: LDA + SVM sobre imágenes RGB
-            lda_c2, svm_c2 = EntrenamientoLDASVMC2(X_train_scaled, y_train, X_test_scaled, y_test)
-            joblib.dump(lda_c2, "lda_c2.pkl")
-            joblib.dump(svm_c2, "svm_c2.pkl")
+        # Entrenamiento del clasificador C2: LDA + SVM sobre imágenes RGB
+        ldaC2, svmC2 = EntrenamientoLDASVMC2(xTrainN, yTrain, xTestN, yTest)
+        joblib.dump(ldaC2, "ldaC2.pkl")
+        joblib.dump(svmC2, "svmC2.pkl")
 
-            # Leer coordenadas de las esquinas de todas las imágenes desde archivo
-            esquinas = LeerEsquinas(txt_coordenadas)
+        # Leer coordenadas de las esquinas de todas las imágenes desde archivo
+        esquinas = LeerEsquinas(coordenadasTXT)
 
-            # Cargar imágenes rectificadas para entrenamiento y test (clasificadores C3 y C4)
-            X_train_c3, y_train_c3, clases_c3 = cargarImagenesRectificadas(ruta_train, esquinas)
-            X_test_c3, y_test_c3, _ = cargarImagenesRectificadas(ruta_test, esquinas)
+        # Cargar imágenes rectificadas para entrenamiento y test (clasificadores C3 y C4)
+        xTrainC3, yTrainC3, clasesC3 = cargarImagenesRectificadas(rutaTrain, esquinas)
+        xTestC3, yTestC3, _ = cargarImagenesRectificadas(rutaTest, esquinas)
 
-            # Verificar que haya datos suficientes para entrenar con imágenes rectificadas
-            if X_train_c3.size == 0 or X_test_c3.size == 0:
-                raise ValueError("No hay datos para entrenar o evaluar el clasificador C3 con imágenes rectificadas.")
+        # Normalizar vectores de características de imágenes rectificadas
+        scalerC3 = StandardScaler()
+        xTrainC3N = scalerC3.fit_transform(xTrainC3)
+        xTestC3N = scalerC3.transform(xTestC3)
+        joblib.dump(scalerC3, "scalerC3.pkl")
 
-            # Normalizar vectores de características de imágenes rectificadas
-            print("Normalizando características rectificadas...")
-            scaler_c3 = StandardScaler()
-            X_train_c3_scaled = scaler_c3.fit_transform(X_train_c3)
-            X_test_c3_scaled = scaler_c3.transform(X_test_c3)
-            joblib.dump(scaler_c3, "scaler_c3.pkl")
+        # Entrenamiento del clasificador C3: SVM sobre imágenes rectificadas
+        svmC3 = EntrenamientoSVMC3(xTrainC3N, yTrainC3, xTestC3N, yTestC3)
+        joblib.dump(svmC3, "svmC3.pkl")
+        joblib.dump(clasesC3, "clasesC3.pkl")
 
-            # Entrenamiento del clasificador C3: SVM sobre imágenes rectificadas
-            svm_c3 = EntrenamientoSVMC3(X_train_c3_scaled, y_train_c3, X_test_c3_scaled, y_test_c3)
-            joblib.dump(svm_c3, "svm_c3.pkl")
-            joblib.dump(clases_c3, "clases_c3.pkl")
-
-            # Entrenamiento del clasificador C4: LDA + SVM sobre imágenes rectificadas
-            lda_c4, svm_c4 = EntrenamientoLDASVMC2(X_train_c3_scaled, y_train_c3, X_test_c3_scaled, y_test_c3)
-            y_pred_c4 = svm_c4.predict(lda_c4.transform(X_test_c3_scaled))
-            acc_c4 = accuracy_score(y_test_c3, y_pred_c4)
-            print(f"Accuracy C4: {acc_c4:.4f}")
-
-            # Guardar los modelos entrenados
-            joblib.dump(lda_c4, "lda_c4.pkl")
-            joblib.dump(svm_c4, "svm_c4.pkl")
-
-            print("Modelos y etiquetas guardados correctamente.")
-
-        # Si ya existen los modelos, simplemente se cargan desde los archivos .pkl
-        else:
-            print("Modelos encontrados, cargándolos...")
-            clases = joblib.load("clases.pkl")
-            scaler = joblib.load("scaler.pkl")
-            lda_c2 = joblib.load("lda_c2.pkl")
-            svm_c2 = joblib.load("svm_c2.pkl")
-            svm_c1 = joblib.load("svm_c1.pkl")
-
-            clases_c3 = joblib.load("clases_c3.pkl")
-            scaler_c3 = joblib.load("scaler_c3.pkl")
-            svm_c3 = joblib.load("svm_c3.pkl")
-            lda_c4 = joblib.load("lda_c4.pkl")
-            svm_c4 = joblib.load("svm_c4.pkl")
-            esquinas = LeerEsquinas("coordenadasprac2.txt")
-            ruta_test = 'MUESTRA_PRACTICA2_2025/Test'
-            X_test, y_test, _ = cargarImagenes(ruta_test)
-            X_test_scaled = scaler.transform(X_test)
-
-            esquinas = LeerEsquinas("coordenadasprac2.txt")
-            X_test_c3, y_test_c3, _ = cargarImagenesRectificadas(ruta_test, esquinas)
-            X_test_c3_scaled = scaler_c3.transform(X_test_c3)
-            acc_c1 = accuracy_score(y_test, svm_c1.predict(X_test_scaled))
-            acc_c4 = accuracy_score(y_test_c3, svm_c4.predict(lda_c4.transform(X_test_c3_scaled)))
-
-            
+        # Entrenamiento del clasificador C4: LDA + SVM sobre imágenes rectificadas
+        ldaC4, svmC4 = EntrenamientoLDASVMC2(xTrainC3N, yTrainC3, xTestC3N, yTestC3)
+        yPredictC4 = svmC4.predict(ldaC4.transform(xTestC3N))
+        accuracyC4 = accuracy_score(yTestC3, yPredictC4)
+        print("Accuracy C4: "+str(round(accuracyC4,4)))
 
 
-        # Preprocesar la imagen pasada por argumento para cada uno de los clasificadores
-        vector = preprocesar_imagen_rgb(rutaImagen)
-        vec_lda = lda_c2.transform(vector)
-        pred_c2 = svm_c2.predict(vec_lda)[0]
-        pred_c1 = svm_c1.predict(vector)[0]
+        # Guarda los modelos entrenados
+        joblib.dump(ldaC4, "ldaC4.pkl")
+        joblib.dump(svmC4, "svmC4.pkl")
 
-        vec_c3 = preprocesar_imagen_c3(rutaImagen, esquinas)
-        pred_c3 = svm_c3.predict(vec_c3)[0]
+        print("Modelos y etiquetas guardados")
 
-        vec_c4 = preprocesar_imagen_rectificada_lda_c4(rutaImagen, esquinas)
-        pred_c4 = svm_c4.predict(vec_c4)[0]
+    # Si ya existen los modelos, simplemente se cargan desde los archivos .pkl
+    else:
+        print("Los modelos encontrados se están cargando")
+        clases = joblib.load("clases.pkl")
+        scaler = joblib.load("scaler.pkl")
+        ldaC2 = joblib.load("ldaC2.pkl")
+        svmC2 = joblib.load("svmC2.pkl")
+        svmC1 = joblib.load("svmC1.pkl")
 
-        acc_c2 = accuracy_score(y_test, svm_c2.predict(lda_c2.transform(X_test_scaled)))
-        acc_c3 = accuracy_score(y_test_c3, svm_c3.predict(X_test_c3_scaled))
+        clasesC3 = joblib.load("clasesC3.pkl")
+        scalerC3 = joblib.load("scalerC3.pkl")
+        svmC3 = joblib.load("svmC3.pkl")
+        ldaC4 = joblib.load("ldaC4.pkl")
+        svmC4 = joblib.load("svmC4.pkl")
+        esquinas = LeerEsquinas("coordenadasprac2.txt")
+        rutaTest = 'MUESTRA_PRACTICA2_2025/Test'
+        xTest, yTest, _ = cargarImagenes(rutaTest)
+        xTestN = scaler.transform(xTest)
 
+        esquinas = LeerEsquinas("coordenadasprac2.txt")
+        xTestC3, yTestC3, _ = cargarImagenesRectificadas(rutaTest, esquinas)
+        xTestC3N = scalerC3.transform(xTestC3)
+        accuracyC1 = accuracy_score(yTest, svmC1.predict(xTestN))
+        accuracyC4 = accuracy_score(yTestC3, svmC4.predict(ldaC4.transform(xTestC3N)))
 
-        # Mostrar predicción de cada clasificador por pantalla
-        print("\n" + "-"*50)
-        print("RESULTADO DE CLASIFICACIÓN")
-        print("-"*50)
-        print(f"{'Clasificador':<25} {'Predicción':<20}")
-        print("-"*50)
-        print(f"{'C1 - SVM sobre RGB':<25} {clases[pred_c1]:<20}")
-        print(f"{'C2 - LDA + SVM sobre RGB':<25} {clases[pred_c2]:<20}")
-        print(f"{'C3 - SVM sobre rectificada':<25} {clases_c3[pred_c3]:<20}")
-        print(f"{'C4 - LDA + SVM rectificada':<25} {clases_c3[pred_c4]:<20}")
-        print("-"*50)
-
-        # Tabla de comparación de accuracy por clasificador
-        print("\n" + "="*60)
-        print("COMPARACIÓN DE LOS MODELOS (ACCURACY)")
-        print("="*60)
-        print(f"{'Clasificador':<25} {'Entrada':<20} {'Accuracy':<10}")
-        print("-"*60)
-        print(f"{'C1 - SVM':<25} {'Imagen RGB':<20} {round(acc_c1, 4):<10}")
-        print(f"{'C2 - LDA + SVM':<25} {'Imagen RGB':<20} {round(accuracy_score(y_test, svm_c2.predict(lda_c2.transform(X_test_scaled))), 4):<10}")
-        print(f"{'C3 - SVM':<25} {'Imagen rectificada':<20} {round(accuracy_score(y_test_c3, svm_c3.predict(X_test_c3_scaled)), 4):<10}")
-        print(f"{'C4 - LDA + SVM':<25} {'Imagen rectificada':<20} {round(acc_c4, 4):<10}")
-        print("="*60)
+        
 
 
+    # Preprocesar la imagen pasada por argumento para cada uno de los clasificadores
+    vector = PreprocesarImagenRGB(rutaImagen)
+    vectorLDAC2 = ldaC2.transform(vector)
+    predictC2 = svmC2.predict(vectorLDAC2)[0]
+    predictC1 = svmC1.predict(vector)[0]
 
-    # Capturar errores inesperados y mostrarlos por pantalla
-    except Exception as e:
-        print(f"Error inesperado: {e}")
+    vectorC3 = PreprocesarImagenC3(rutaImagen, esquinas)
+    predictC3 = svmC3.predict(vectorC3)[0]
+
+    vectorLDAC4 = PreprocesarImagenRectificadaLDAC4(rutaImagen, esquinas)
+    predictC4 = svmC4.predict(vectorLDAC4)[0]
+
+    accuracyC2 = accuracy_score(yTest, svmC2.predict(ldaC2.transform(xTestN)))
+    accuracyC3 = accuracy_score(yTestC3, svmC3.predict(xTestC3N))
+
+
+    # Mostrar predicción de cada clasificador por pantalla
+    print("\n" + "-"*50)
+    print("RESULTADO DE CLASIFICACIÓN")
+    print("-"*50)
+    print(f"{'Clasificador':<25} {'Predicción':<20}")
+    print("-"*50)
+    print(f"{'C1 - SVM sobre RGB':<25} {clases[predictC1]:<20}")
+    print(f"{'C2 - LDA + SVM sobre RGB':<25} {clases[predictC2]:<20}")
+    print(f"{'C3 - SVM sobre rectificada':<25} {clasesC3[predictC3]:<20}")
+    print(f"{'C4 - LDA + SVM rectificada':<25} {clasesC3[predictC4]:<20}")
+    print("-"*50)
+
+    # Tabla de comparación de accuracy por clasificador
+    print("\n" + "="*60)
+    print("COMPARACIÓN DE LOS MODELOS (ACCURACY)")
+    print("="*60)
+    print(f"{'Clasificador':<25} {'Entrada':<20} {'Accuracy':<10}")
+    print("-"*60)
+    print(f"{'C1 - SVM':<25} {'Imagen RGB':<20} {round(accuracyC1, 4):<10}")
+    print(f"{'C2 - LDA + SVM':<25} {'Imagen RGB':<20} {round(accuracy_score(yTest, svmC2.predict(ldaC2.transform(xTestN))), 4):<10}")
+    print(f"{'C3 - SVM':<25} {'Imagen rectificada':<20} {round(accuracy_score(yTestC3, svmC3.predict(xTestC3N)), 4):<10}")
+    print(f"{'C4 - LDA + SVM':<25} {'Imagen rectificada':<20} {round(accuracyC4, 4):<10}")
+    print("="*60)
+
+
