@@ -1,5 +1,7 @@
 import sys
-import os
+
+
+import os # Libreria para cargar las imagenes
 import cv2
 import numpy as np
 import joblib
@@ -10,58 +12,91 @@ from sklearn.metrics import accuracy_score
 from pprint import pprint
 import ast  # Para parsear coordenadas desde txt
 
-def cargar_imagenes(ruta_base, tamaño=(400, 300)):
-    print(f"Cargando imágenes desde: {ruta_base}")
-    X, y = [], []
-    clases_encontradas = sorted(os.listdir(ruta_base))
-    print(f"Clases encontradas: {clases_encontradas}")
-    for etiqueta, clase in enumerate(clases_encontradas):
-        carpeta = os.path.join(ruta_base, clase)
-        if not os.path.isdir(carpeta):
-            continue
+
+#                                                                   Funciones para cargar imagenes    
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+# Cargar imagenes, vectores y etiquetas de las clases
+# Fuente de la funcion flatten: https://stackoverflow.com/questions/46621942/flattening-and-unflattening-an-image
+def cargarImagenes(ruta):
+    tamaño=(400,300)
+    print("Cargando imagenes: ", ruta)
+
+    #Vectores imagenes y etiquetas
+    x = []
+    y = []
+    # Se ordenan las clases alfabéticamente
+    clasesEncontradas = sorted(os.listdir(ruta))
+    print("Clases: ", clasesEncontradas)
+
+    # Busca las imagenes en las carpetas
+    for etiqueta, clase in enumerate(clasesEncontradas):
+        carpeta = os.path.join(ruta, clase)
+
         for archivo in os.listdir(carpeta):
-            if archivo.lower().endswith(('.png', '.jpg', '.jpeg')):
-                ruta_img = os.path.join(carpeta, archivo)
-                img = cv2.imread(ruta_img)
-                if img is None:
-                    continue
+            if archivo.lower().endswith(('.png','.jpg','.jpeg')):
+
+                rutaImagen = os.path.join(carpeta, archivo)
+                img = cv2.imread(rutaImagen)
                 img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-                img = cv2.resize(img, tamaño)
-                vec = img.flatten().astype(np.float32)
-                X.append(vec)
-                y.append(etiqueta)
-    print(f"Total imágenes cargadas: {len(X)}")
-    return np.array(X, dtype=np.float32), np.array(y, dtype=np.int32), clases_encontradas
 
-def cargar_imagenes_rectificadas(ruta_base, esquinas_dict, tamaño=(400, 300)):
-    X, y = [], []
-    clases_encontradas = sorted(os.listdir(ruta_base))
-    print(f"Cargando imágenes rectificadas desde: {ruta_base}")
-    for etiqueta, clase in enumerate(clases_encontradas):
-        carpeta = os.path.join(ruta_base, clase)
-        if not os.path.isdir(carpeta):
-            continue
+                # Se cambia el tamaño de la imagen
+                img = cv2.resize(img, tamaño)
+                # vector de dimensión 1 para SVM y LDA
+                vector = img.flatten().astype(np.float32)
+
+                x.append(vector)
+                y.append(etiqueta)
+
+    # Hay que convertir las listas a arrays de numpy para no producir error ejecucion
+    return np.array(x, dtype=np.float32), np.array(y, dtype=np.int32), clasesEncontradas
+
+
+
+# Funcion que carga las imagenes igual que la anterior, pero ya rectificadas
+# Fuente de la funcion flatten: https://stackoverflow.com/questions/46621942/flattening-and-unflattening-an-image
+def cargarImagenesRectificadas(ruta, rutaCoordenadas):
+    print("Cargando imagenes rectificadas: ", ruta)
+    tamaño=(400, 300)
+    #Vectores imagenes y etiquetas
+    x = []
+    y = []
+
+    # Se ordenan las clases alfabéticamente
+    clasesEncontradas = sorted(os.listdir(ruta))
+    
+    # Busca las imagenes en las carpetas
+    for etiqueta, clase in enumerate(clasesEncontradas):
+        carpeta = os.path.join(ruta, clase)
+
         for archivo in os.listdir(carpeta):
             if archivo.lower().endswith(('.png', '.jpg', '.jpeg')):
-                if archivo not in esquinas_dict:
-                    print(f"Advertencia: no se encontró esquinas para {archivo}, se omite")
-                    continue
-                esquinas = esquinas_dict[archivo]
-                if len(esquinas) != 4:
-                    print(f"Advertencia: esquinas inválidas para {archivo}, se omite")
-                    continue
-                ruta_img = os.path.join(carpeta, archivo)
-                img = cv2.imread(ruta_img)
-                if img is None:
-                    continue
-                img_rect = RectificarImagen(img, esquinas)
-                img_resized = cv2.resize(img_rect, tamaño)
-                vec = img_resized.flatten().astype(np.float32)
-                X.append(vec)
-                y.append(etiqueta)
-    print(f"Total imágenes rectificadas cargadas desde {ruta_base}: {len(X)}")
-    return np.array(X, dtype=np.float32), np.array(y, dtype=np.int32), clases_encontradas
+                
+                # Conseguir las esquinas de la imagen del archivo txt
+                esquinas = rutaCoordenadas[archivo]
 
+                rutaImagen = os.path.join(carpeta, archivo)
+                img = cv2.imread(rutaImagen)
+
+                 # Se rectifica la imagen con nuestra funcion de la practica 1
+                img = RectificarImagen(img, esquinas)
+                 # Se cambia el tamaño de la imagen
+                img = cv2.resize(img, tamaño)
+
+                # vector de dimensión 1 para SVM y LDA
+                vector = img.flatten().astype(np.float32)
+
+                x.append(vector)
+                y.append(etiqueta)
+
+    # Hay que convertir las listas a arrays de numpy para no producir error ejecucion
+    return np.array(x, dtype=np.float32), np.array(y, dtype=np.int32), clasesEncontradas
+
+
+
+
+
+# --------------------------------------------------------------------------------------------------------------------------------------------------------
+#                                                                   Entrenamiento de modelos
 
 
 def entrenar_solo_svm(X_train, y_train, X_test, y_test):
@@ -95,6 +130,7 @@ def entrenar_svm(X_train, y_train, X_test, y_test):
     print(f"Accuracy C3: {acc:.4f}")
     return svm
 
+# Funcion para rectificar imagenes de nuestra practica 1
 def RectificarImagen(imagen, esquinas):
     srcImagen = np.array(esquinas, np.float32)
     ancho = int(np.linalg.norm(srcImagen[0] - srcImagen[1]))
@@ -183,8 +219,8 @@ if __name__ == "__main__":
             ruta_test = 'MUESTRA_PRACTICA2_2025/Test'
             txt_coordenadas = 'coordenadasprac2.txt'
 
-            X_train, y_train, clases = cargar_imagenes(ruta_train)
-            X_test, y_test, _ = cargar_imagenes(ruta_test)
+            X_train, y_train, clases = cargarImagenes(ruta_train)
+            X_test, y_test, _ = cargarImagenes(ruta_test)
 
             print("Normalizando características...")
             scaler = StandardScaler()
@@ -203,8 +239,8 @@ if __name__ == "__main__":
             esquinas_dict = leer_esquinas(txt_coordenadas)
 
             # Cargar imágenes rectificadas para entrenamiento y test usando coordenadas
-            X_train_c3, y_train_c3, clases_c3 = cargar_imagenes_rectificadas(ruta_train, esquinas_dict)
-            X_test_c3, y_test_c3, _ = cargar_imagenes_rectificadas(ruta_test, esquinas_dict)
+            X_train_c3, y_train_c3, clases_c3 = cargarImagenesRectificadas(ruta_train, esquinas_dict)
+            X_test_c3, y_test_c3, _ = cargarImagenesRectificadas(ruta_test, esquinas_dict)
 
             if X_train_c3.size == 0 or X_test_c3.size == 0:
                 raise ValueError("No hay datos para entrenar o evaluar el clasificador C3 con imágenes rectificadas.")
